@@ -1,0 +1,17 @@
+Libby_23
+*.nc
+*.pickle
+*.pyc
+*.json
+*.ipynb
+*.gif
+*.png
+.DS_Store
+toolbox/
+.git_archive/
+Av
+GETTING_STARTED.txt
+JBL.txt
+LICENSE
+saved_models/
+*.yml
