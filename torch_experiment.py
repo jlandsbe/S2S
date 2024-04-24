@@ -14,11 +14,11 @@ from save_load_model_run import save_model_run
 import train_model
 import metrics
 import pickle
-import model_diagnostics
+import model_diagnostics_torch
 import base_directories
 import plots
 import warnings
-from torch_model import CustomDataset, TorchModel_base, TorchModel_gate, Trainer, EarlyStopping, prepare_device
+from torch_model import CustomDataset, TorchModel_base, TorchModel_gate, MaskTrainer, EarlyStopping, GateTrainer, prepare_device
 from torch.utils.data import DataLoader
 import torch
 import torchinfo
@@ -211,8 +211,8 @@ def train_experiments(
                     output_plot = analog_input*np.nan
                     insert_row = (analog_input.shape[1] - analog_output.shape[1]) // 2
                     output_plot[:,insert_row:insert_row + analog_output.shape[1], :, :] = analog_output[:,:,:,np.newaxis]
-                    model_diagnostics.video_syn_data(settings,analog_input[0:200,:,:,:],lat,lon, sv= "_input_")
-                    model_diagnostics.video_syn_data(settings,output_plot[0:200,:,:,:],lat,lon, sv = "_output_")
+                    model_diagnostics_torch.video_syn_data(settings,analog_input[0:200,:,:,:],lat,lon, sv= "_input_")
+                    model_diagnostics_torch.video_syn_data(settings,output_plot[0:200,:,:,:],lat,lon, sv = "_output_")
                 # Make, compile, train, and save the model.
                 tf.keras.backend.clear_session()
                 np.random.seed(settings["rng_seed"])
@@ -234,20 +234,20 @@ def train_experiments(
                     trainset,
                     batch_size=settings["batch_size"],
                     shuffle=True,
-                    drop_last=True,
+                    drop_last=False,
                 )
                     val_loader = DataLoader(
                     valset,
                     batch_size=settings["val_batch_size"],
                     shuffle=True,
-                    drop_last=True,
+                    drop_last=False,
 )
                     model = TorchModel_base(settings, np.shape(soi_train_input)[1:])
                     criterion = torch.nn.MSELoss()
                     optimizer = torch.optim.Adam(model.parameters(), lr=settings["interp_learning_rate"])
                     device = prepare_device()
                     metric_funcs = []
-                    trainer = Trainer(
+                    trainer = MaskTrainer(
                         model,
                         criterion,
                         metric_funcs,
@@ -267,17 +267,7 @@ def train_experiments(
     verbose=1,
     col_names=("input_size", "output_size", "num_params"),
 )
-#                     fake_maps = np.zeros((1,)+np.shape(soi_train_input)[1:3])
-#                     model2 = TorchModel_gate(settings, np.shape(soi_train_input)[1:], fake_maps)
-#                     torchinfo.summary(
-#     model2,
-#     [
-#         analog_input[: settings["batch_size"]].shape,
-#         soi_train_input[: settings["batch_size"]].shape,
-#     ],
-#     verbose=1,
-#     col_names=("input_size", "output_size", "num_params"),
-# )
+
                     model.to(device)
                     trainer.fit()
                 else:
@@ -293,8 +283,8 @@ def train_experiments(
                                 nm2 = "_gate_" + str(np.argmax(gates[i])) +  "_branches_" + str(i)
                                 nm3 = "_soi_sample_" + str(i) + "_gates_" + str(np.mean(gates,axis=0))
                                 #model_diagnostics.visualize_interp_model(settings, weights_val[i], lat, lon, sv = nm, clims = (round((np.mean(np.min(weights_val, axis=(1, 2)))),6), round(np.mean(np.max(weights_val, axis=(1, 2))),6)))
-                                model_diagnostics.visualize_interp_model(settings, x_val[0][i], lat, lon, sv = nm3)
-                                model_diagnostics.visualize_interp_model(settings, branches[i], lat, lon, sv = nm2, ttl = gates[i])
+                                model_diagnostics_torch.visualize_interp_model(settings, x_val[0][i], lat, lon, sv = nm3)
+                                model_diagnostics_torch.visualize_interp_model(settings, branches[i], lat, lon, sv = nm2, ttl = gates[i])
                                 print("done")
                             #weights_val = (2500, 72, 144, 1), 2500 coming from validation batch size
                     #this returns the mask! So could cut it here to just get the mask
@@ -306,7 +296,27 @@ def train_experiments(
                             reg_map = np.zeros(np.shape(weights_val))
                             reg_map = build_data.extract_region(reg_map, regions.get_region_dict(settings["target_region_name"]), lat=lat, lon=lon, mask_builder = 1)
                             map_options = np.stack([weights_val, reg_map])
-                        model_diagnostics.visualize_interp_model(settings, weights_val, lat, lon)
+                            #Here is where I can run the network
+                            gate_model = TorchModel_gate(settings, np.shape(soi_train_input)[1:], map_options)
+                            criterion = torch.nn.MSELoss()
+                            optimizer = torch.optim.Adam(model.parameters(), lr=settings["interp_learning_rate"])
+                            device = prepare_device()
+                            metric_funcs = []
+                            trainer = MaskTrainer(
+                                gate_model,
+                                criterion,
+                                metric_funcs,
+                                optimizer,
+                                max_epochs=settings["max_epochs"],
+                                data_loader=train_loader,
+                                validation_data_loader=val_loader,
+                                device=device,
+                                settings=settings,
+        )
+                            model.to(device)
+                            trainer.fit()
+
+                        model_diagnostics_torch.visualize_interp_model(settings, weights_val, lat, lon)
                 else:
                     weights_val = None
                 #this is where I will do some evaluation
@@ -325,13 +335,22 @@ def train_experiments(
                 # PLOT MODEL EVALUATION METRICS
                 if settings["state_masks"] == 1:
                     weights_val = None 
-                metrics_dict = model_diagnostics.visualize_metrics(settings, model, soi_test_input, soi_test_output,
-                                                                   analog_input, analog_output, lat,
-                                                                   lon, weights_val, persist_err,
-                                                                   n_testing_analogs=analog_input.shape[0],
-                                                                   analogue_vector = settings["analogue_vec"],
-                                                                   soi_train_output = soi_train_output,
-                                                                   fig_savename="subset_skill_score_vs_nanalogues")
+                if settings["gates"] or 1:
+                    metrics_dict = model_diagnostics_torch.visualize_metrics(settings, model, soi_test_input, soi_test_output,
+                                                                    analog_input, analog_output, lat,
+                                                                    lon, weights_val, persist_err,
+                                                                    n_testing_analogs=analog_input.shape[0],
+                                                                    analogue_vector = settings["analogue_vec"],
+                                                                    soi_train_output = soi_train_output,
+                                                                    fig_savename="subset_skill_score_vs_nanalogues", gates=gates)
+                else:
+                    metrics_dict = model_diagnostics_torch.visualize_metrics(settings, model, soi_test_input, soi_test_output,
+                                                                    analog_input, analog_output, lat,
+                                                                    lon, weights_val, persist_err,
+                                                                    n_testing_analogs=analog_input.shape[0],
+                                                                    analogue_vector = settings["analogue_vec"],
+                                                                    soi_train_output = soi_train_output,
+                                                                    fig_savename="subset_skill_score_vs_nanalogues")
 
                 # SAVE THE METRICS
                 print("almost at the end")

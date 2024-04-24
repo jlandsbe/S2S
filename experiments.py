@@ -27,7 +27,7 @@ def get_experiment(exp_name, base_exp_name=None, settings_overwrite=None):
 
 experiments = {
 
-     "exp300_test_pytorch_2_predictor_test": {
+     "exp300_test_pytorch_2_gate_test": {
         "model_type_list": ["interp_model"],
         #"model_type": "interp_model",
         "presaved_data_filename": None,
@@ -45,7 +45,7 @@ experiments = {
         "lead_time": 5*4,
         "maskout_landocean_input": "all",
         "maskout_landocean_output": "all",
-        "extra_channel": 'TREFHT',  # years into the past to use to compute the time tendency and add it as a 2nd channel
+        "extra_channel": None,  # years into the past to use to compute the time tendency and add it as a 2nd channel
         "standardize_bool": True,
         "analog_members": np.array([3]),
         "soi_train_members": np.array([5]),

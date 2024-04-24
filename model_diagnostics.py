@@ -66,6 +66,8 @@ def soi_iterable(n_analogs, soi_input, soi_output, analog_input, analog_output, 
     Create an iterable for a parallel approach to metric assessment
     """
     for i_soi in range(soi_input.shape[0]):
+        if gates != None:
+            mask = gates[i_soi]
         inputs = {"n_analogs": n_analogs,
                   "max_analogs": np.max(n_analogs),
                   "analog_input": analog_input,
@@ -140,43 +142,44 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
     # -----------------------
     # Interpretable-Analog
     if settings["model_type"] == "interp_model":
-            lst = []
+            
             if mask is None:
-                if settings["error_calc"] == "map":
-                    error_network = np.array([])
-                #for i_analogue_loop, nlog in enumerate(analogue_vector):
-            # let the network tell us every prediction what mask to use
-            # this code is very slow, but the memory leak has been dealt with (xarrray did not have this issue)
-                for nlog in analogue_vector:
-                    temp_hold = []
-                    for sample in np.arange(0, soi_input.shape[0]):
+                lst = []
+            #     if settings["error_calc"] == "map":
+            #         error_network = np.array([])
+            #     #for i_analogue_loop, nlog in enumerate(analogue_vector):
+            # # let the network tell us every prediction what mask to use
+            # # this code is very slow, but the memory leak has been dealt with (xarrray did not have this issue)
+            #     for nlog in analogue_vector:
+            #         temp_hold = []
+            #         for sample in np.arange(0, soi_input.shape[0]):
 
-                        soi_input_sample = soi_input[sample, :, :, :]
-                        soi_output_sample = soi_output[sample]
+            #             soi_input_sample = soi_input[sample, :, :, :]
+            #             soi_output_sample = soi_output[sample]
 
-                        prediction_test = model.predict(
-                            [np.broadcast_to(soi_input_sample,
-                                            (analog_input.shape[0],
-                                            soi_input_sample.shape[0],
-                                            soi_input_sample.shape[1],
-                                            soi_input_sample.shape[2])
-                                            ),
-                            analog_input],
-                            batch_size=10_000,
-                        )
-                        # this gc.collect must be included or there is a major memory leak when model.predict is in a loop
-                        # https://stackoverflow.com/questions/64199384/tf-keras-model-predict-results-in-memory-leak
-                        # https://github.com/tensorflow/tensorflow/issues/44711
-                        _ = gc.collect()
-                        i_analogue = np.argsort(prediction_test, axis=0)[:nlog, 0]
-                        if settings["error_calc"] == "field":
-                            temp_hold.append(metrics.get_analog_errors(soi_output_sample, np.mean(analog_output[i_analogue], axis=0), settings["error_calc"]))
-                        else:
-                            error_network[i_analogue_loop, sample] = metrics.get_analog_errors(soi_output_sample,
-                                                                                        np.mean(analog_output[i_analogue]), settings["error_calc"])
-                    lst.append(temp_hold)
-                error_network = np.swapaxes(np.array(lst),0,1)  
-                #error_network = np.swapaxes(error_network,0,1)
+            #             prediction_test = model.predict(
+            #                 [np.broadcast_to(soi_input_sample,
+            #                                 (analog_input.shape[0],
+            #                                 soi_input_sample.shape[0],
+            #                                 soi_input_sample.shape[1],
+            #                                 soi_input_sample.shape[2])
+            #                                 ),
+            #                 analog_input],
+            #                 batch_size=10_000,
+            #             )
+            #             # this gc.collect must be included or there is a major memory leak when model.predict is in a loop
+            #             # https://stackoverflow.com/questions/64199384/tf-keras-model-predict-results-in-memory-leak
+            #             # https://github.com/tensorflow/tensorflow/issues/44711
+            #             _ = gc.collect()
+            #             i_analogue = np.argsort(prediction_test, axis=0)[:nlog, 0]
+            #             if settings["error_calc"] == "field":
+            #                 temp_hold.append(metrics.get_analog_errors(soi_output_sample, np.mean(analog_output[i_analogue], axis=0), settings["error_calc"]))
+            #             else:
+            #                 error_network[i_analogue_loop, sample] = metrics.get_analog_errors(soi_output_sample,
+            #                                                                             np.mean(analog_output[i_analogue]), settings["error_calc"])
+                #     lst.append(temp_hold)
+                # error_network = np.swapaxes(np.array(lst),0,1)  
+                # #error_network = np.swapaxes(error_network,0,1)
             else:
                 with Pool(n_processes) as pool:
                     soi_iterable_instance = soi_iterable(n_analogues,

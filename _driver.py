@@ -15,7 +15,7 @@ __version__ = "30 March 2023"
 
 # List of experiments to run
 EXP_NAME_LIST = (
-    "exp300_test_pytorch_2_predictor_test",)
+    "exp300_test_pytorch_2_gate_test",)
 
 if __name__ == "__main__":
 
