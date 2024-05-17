@@ -105,7 +105,7 @@ def super_classification_operation(inputs):
     i_analogs = compute_best_analogs(inputs, inputs["max_analogs"])
     results = []
     for n_analogs in inputs["n_analogs"]:
-        results.append(get_analog_errors(inputs["soi_output_sample"], np.median(inputs["analog_output"][i_analogs[:n_analogs]]), "classify")*1.0)
+        results.append(get_analog_errors(inputs["soi_output_sample"], np.round(np.mean(inputs["analog_output"][i_analogs[:n_analogs]], axis=0)), "mae"))
     return np.stack(results, axis=0)
 
 #do we want this to be weighted?
@@ -129,7 +129,7 @@ def get_persist_errors(soi, analog_prediction, type="mse"):
     if type=="mse":
         diff = (soi - analog_prediction)**2
         if len(np.shape(diff))>2:
-            diff = diff.mean(dim = ["lat","lon"])#think I should change this to axis = (1,2) to account for other channel in last indice
+            diff = np.mean(diff, axis = (-1,-2))#think I should change this to axis = (1,2) to account for other channel in last indice
         return diff**.5
     if type=="field":
         numerator = np.sum((soi * analog_prediction), axis=(-1,-2))
@@ -137,12 +137,10 @@ def get_persist_errors(soi, analog_prediction, type="mse"):
         denominator_y = np.sum((analog_prediction*analog_prediction),  axis=(-1,-2))
         weighted_corr = numerator / (np.sqrt(denominator_x * denominator_y))
         return 1-weighted_corr
+    if type=="super_classify":
+        return np.array([.5])
     if type == "map":
-        print(soi)
-        print(np.shape(soi))
-        print(analog_prediction)
-        print(np.shape(analog_prediction))
-        print("hello")
+        raise Exception("Sorry, this error calculation type is not implemented.")
     else:
         raise Exception("Sorry, this error calculation type is not implemented.")
 
@@ -164,6 +162,9 @@ def get_analog_errors(soi, analog_prediction, type="mse"):
     if type=="map":
         diff = (soi - analog_prediction)**2
         return diff**.5
+    if type=="mae":
+        diff = np.abs(soi - analog_prediction)
+        return np.average(diff, axis=(-1,-2))
     else:
         raise Exception("Sorry, this error calculation type is not implemented.")
 

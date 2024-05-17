@@ -21,8 +21,8 @@ warnings.filterwarnings(action='ignore', message='All-NaN slice encountered')
 warnings.filterwarnings("ignore", category=ShapelyDeprecationWarning)
 #np.warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning)
 
-__author__ = "Jamin K. Rader, Elizabeth A. Barnes, and Randal J. Barnes"
-__version__ = "30 March 2023"
+__author__ = "Jacob Landsberg, Jamin K. Rader, Elizabeth A. Barnes, and Randal J. Barnes"
+__version__ = "6 May 2024"
 
 dir_settings = base_directories.get_directories()
 dpiFig = 300
@@ -101,6 +101,10 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                    soi_train_output=None,
                    analogue_vector=[1, 2, 5, 10, 15, 20, 25, 30],
                    show_figure=False, save_figure=True, fig_savename="", my_masks=None, gates = None):
+    
+    if settings["median"]:
+        soi_output = 1.0*(soi_output > 0)
+        analog_output = 1.0*(analog_output > 0)
 
     # Number of Processes for Pool (all but two)
     n_processes = os.cpu_count() - 2
@@ -188,7 +192,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                                                             analog_input,
                                                             analog_output,
                                                             mask, 1, gates = gates)
-                    if settings["error_calc"] == "super_classify":
+                    if settings["median"]:
                         error_network[:, :] = run_complex_operations(metrics.super_classification_operation,
                                                                     soi_iterable_instance,
                                                                     pool,
@@ -215,7 +219,9 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                         error_network[:, :] = x[:,0,:]
                         analog_match_error = x[:,1,:] 
                         prediction_spread = x[:,2,:]
-                        plots.uncertainty_whiskers(analogue_vector, error_network, analog_match_error, prediction_spread, settings, bins = [0, .3, .6,.9,1.5])
+                        bins1 = np.percentile(analog_match_error, [0, 20, 50, 70, 90], axis=0).T
+                        bins2 = np.percentile(prediction_spread, [0, 20, 50, 70, 90], axis=0).T
+                        plots.uncertainty_whiskers(analogue_vector, error_network, analog_match_error, prediction_spread, settings, bins1 = bins1, bins2 = bins2)
                     else:
                         x = np.array(run_complex_operations(metrics.mse_operation,
                                                                     soi_iterable_instance,
@@ -224,7 +230,9 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                         error_network[:, :] = x[:,0,:]
                         analog_match_error = x[:,1,:] 
                         prediction_spread = x[:,2,:]
-                        plots.uncertainty_whiskers(analogue_vector, error_network, analog_match_error, prediction_spread, settings, bins = [0, .3, .6,.9, 1.5])
+                        bins1 = np.percentile(analog_match_error, [0, 20, 40, 60, 80], axis = 0).T
+                        bins2 = np.percentile(prediction_spread, [0, 20, 50, 60, 80], axis = 0).T
+                        plots.uncertainty_whiskers(analogue_vector, error_network, analog_match_error, prediction_spread, settings, bins1 = bins1, bins2 = bins2)
                     print("finished network error")
     # -----------------------
     # ANN-Analog
@@ -281,7 +289,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                                                 analog_input,
                                                 analog_output,
                                                 sqrt_area_weights)
-        if settings["error_calc"] == "super_classify":
+        if settings["median"]:
             error_globalcorr[:, :] = run_complex_operations(metrics.super_classification_operation,
                                                             soi_iterable_instance,
                                                             pool,
@@ -323,7 +331,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                                                 analog_reg,
                                                 analog_output,
                                                 sqrt_area_weights)
-        if settings["error_calc"] == "super_classify":
+        if settings["median"]:
             error_corr[:, :] = run_complex_operations(metrics.super_classification_operation,
                                                             soi_iterable_instance,
                                                             pool,
@@ -367,7 +375,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                                                 analog_input,
                                                 analog_output,
                                                 my_masks)
-            if settings["error_calc"] == "super_classify":
+            if settings["median"]:
                 error_customcorr[:, :] = run_complex_operations(metrics.super_classification_operation,
                                                             soi_iterable_instance,
                                                             pool,
@@ -410,7 +418,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                                 size=(n_analog, soi_output.shape[0]), replace=True)
         if settings["error_calc"] == "super_classify":
             error_random[idx_analog, :] = metrics.get_analog_errors(soi_output,
-                                                    np.median(analog_output[i_analogue], axis=0), settings["error_calc"])
+                                                    np.round(np.mean(analog_output[i_analogue], axis=0)), settings["error_calc"])
         elif settings["error_calc"] == "map":
             np.append(error_random,metrics.get_analog_errors(soi_output,
                                                     np.median(analog_output[i_analogue], axis=0), settings["error_calc"]))
@@ -420,8 +428,8 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
 
     # -----------------------
     # Climatology
-    if settings["error_calc"] == "super_classify":
-        error_climo[:] = metrics.get_analog_errors(soi_output, np.median(analog_output), settings["error_calc"]).T
+    if settings['median']:
+        error_climo = np.repeat(np.array([1]), len_analogues)
     elif settings["error_calc"] == "map":
         error_climo = metrics.get_analog_errors(soi_output, np.mean(analog_output, axis=0), settings["error_calc"])
     else:
@@ -436,6 +444,51 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
     time_end = time.perf_counter()
     print(f"    timer = {np.round(time_end - time_start, 1)} seconds")
     print('')
+
+        # -----------------------
+    # Max Skill
+    error_maxskill = np.zeros((len_analogues, soi_input.shape[0])).T * np.nan
+    with Pool(n_processes) as pool:
+        no_weights = np.ones(np.shape(soi_output[:,:,:,np.newaxis])[1:])
+        soi_iterable_instance = soi_iterable(n_analogues,
+                                                soi_output[:,:,:,np.newaxis],
+                                                soi_output,
+                                                analog_output[:,:,:,np.newaxis],
+                                                analog_output,
+                                                no_weights)
+        if settings["median"]:
+            error_maxskill[:, :] = run_complex_operations(metrics.super_classification_operation,
+                                                            soi_iterable_instance,
+                                                            pool,
+                                                            chunksize=soi_input.shape[0]//n_processes,)
+        elif settings["error_calc"] == "classify":
+            error_maxskill[:, :] = run_complex_operations(metrics.classification_operation,
+                                                            soi_iterable_instance,
+                                                            pool,
+                                                            chunksize=soi_input.shape[0]//n_processes,)
+        elif settings["error_calc"] == "map":
+                #number of analogs x time x lat x lon
+                error_maxskill = run_complex_operations(metrics.map_operation,
+                                                            soi_iterable_instance,
+                                                            pool,
+                                                            chunksize=soi_input.shape[0]//n_processes,)
+        elif settings["error_calc"] == "field":
+            error_maxskill[:, :] = run_complex_operations(metrics.field_operation,
+                                                            soi_iterable_instance,
+                                                            pool,
+                                                            chunksize=soi_input.shape[0]//n_processes,)
+        else:
+            error_maxskill[:, :] = run_complex_operations(metrics.mse_operation,
+                                                            soi_iterable_instance,
+                                                            pool,
+                                                            chunksize=soi_input.shape[0]//n_processes,)
+
+
+
+    # -----------------------
+
+
+
     if settings["error_calc"] != "map":
     ### Transpose all the error objects with a num_analogs dimension
     # Dims should be num_analogs x num_samples
@@ -443,6 +496,8 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
         error_corr = error_corr.T
         error_customcorr = error_customcorr.T
         error_globalcorr = error_globalcorr.T
+        error_maxskill = error_maxskill.T
+
 
     # -------------------------------------------
     # SUMMARY STATISTICS
@@ -456,6 +511,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
             print('      climo : ' + str(metrics.eval_function(error_climo[:]).round(3)))
             print('     custom : ' + str(metrics.eval_function(error_custom[:]).round(3)))
             print('    persist : ' + str(metrics.eval_function(error_persist[:]).round(3)))
+            print('    max skill error : ' + str(metrics.eval_function(error_maxskill[i_analogue_loop,:]).round(3)))
             print('')
 
         # SAVE TO DICTIONARY
@@ -469,6 +525,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
             "error_customcorr": error_customcorr,
             "error_network": error_network,
             "error_custom": error_custom,
+            "error_maxskill": error_maxskill,
         }
 
         # MAKE SUMMARY-SKILL PLOT
@@ -588,8 +645,6 @@ def visualize_interp_model(settings, weights_train, lat, lon, sv="", clims =(0,0
         climits = clims
     #climits = (np.percentile(climits_dat, 96),np.percentile(climits_dat, 99))
     # plot the weighted mask
-    print("in the thing")
-    print(climits)
     if len(weights_train.shape) == 4:
 
         weights_train = weights_train.mean(axis=0)

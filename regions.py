@@ -71,8 +71,12 @@ def get_region_dict(region=None):
         },
 
         "n_atlantic" :{
+            "lat_range":[0., 50.],
+            "lon_range":[360.-70., 360-15],
+        },
+        "n_pacific" :{
             "lat_range":[0., 65.],
-            "lon_range":[360.-70., 360.],
+            "lon_range":[360.-205., 360-125],
         },
 
         "trop_indopac" :{
@@ -104,8 +108,12 @@ def get_region_dict(region=None):
             "lon_range":[0., 360.],
           },        
 
-
-    }
+          "tristate" :{
+              
+            "lat_range":[39., 45.],
+            "lon_range":[360-80.5, 360-72.],
+          },
+          }
 
     if region is None:
         return regions_dict

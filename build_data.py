@@ -15,6 +15,7 @@ import gzip
 import os
 import warnings
 from datetime import timedelta
+import regionmask
 
 __author__ = "Jamin K. Rader, Elizabeth A. Barnes, Randal J. Barnes, and Jacob Landsberg"
 __version__ = "June 2023"
@@ -32,8 +33,10 @@ def build_data(settings, data_directory):
 
     if settings["presaved_data_filename"] is None:
         data_savename = dir_settings["data_directory"] + 'presaved_data_' + data_exp_name + '.pickle'
+        persist_savename = dir_settings["data_directory"] + data_exp_name + '_persist_error' + '.pickle'
     else:
         data_savename = dir_settings["data_directory"]+settings["presaved_data_filename"]
+        persist_savename = dir_settings["data_directory"]+settings["presaved_data_filename"] + '_persist_error.pickle'
     persist_err=1 #setting to 1, could save and load this actual value if necessary
 
 #if 
@@ -58,6 +61,10 @@ def build_data(settings, data_directory):
             data_directory, settings, members=settings["analog_members"], input_standard_dict=input_standard_dict,
             output_standard_dict=output_standard_dict,
         )
+        if settings["split_soi"]:
+            year_0 = settings["years"]
+            midpoint = year_0[0]+((year_0[1]-year_0[0])/2)
+            settings["years"] = (year_0[0], midpoint)
 
         print('getting soi training data...')
         #get the data for the SOIs to train on 
@@ -65,6 +72,8 @@ def build_data(settings, data_directory):
             data_directory, settings, members=settings["soi_train_members"], input_standard_dict=input_standard_dict,
             output_standard_dict=output_standard_dict,
         )
+        if settings["split_soi"]:
+            settings["years"] = year_0
          #get the data for the SOIs to validate on 
         print('getting validation data...')
         soi_val_input, soi_val_output, __, __, __, = process_input_output(
@@ -72,6 +81,8 @@ def build_data(settings, data_directory):
             output_standard_dict=output_standard_dict,
         )
         #get the data for the SOIs to test on 
+        if settings["split_soi"]:
+            settings["years"] = (midpoint, year_0[1])
         print('getting testing data...')
         soi_test_input, soi_test_output, __, __, persist_err = process_input_output(
             data_directory, settings, members=settings["soi_test_members"], input_standard_dict=input_standard_dict,
@@ -113,6 +124,8 @@ def build_data(settings, data_directory):
             pickle.dump(lon.to_numpy().astype(np.float32), fp)
 
             pickle.dump(area_weights.astype(np.float32), fp)
+        with open(persist_savename, 'wb') as f:
+            pickle.dump(persist_err, f)
 
     print(f"loading the pre-saved training/validation/testing data.")
     print(f"   {data_savename}")
@@ -136,6 +149,8 @@ def build_data(settings, data_directory):
         lon = pickle.load(fp)
 
         area_weights = pickle.load(fp)
+    with open(persist_savename, 'rb') as f:
+        persist_err = pickle.load(f)
 
     # summarize the data
     analog_text = ("   analog data\n"
@@ -164,7 +179,7 @@ def process_input_output(data_directory, settings, input_standard_dict=None,
     data_feature = get_netcdf(settings["feature_var"], data_directory, settings, members=members)
     #if you are using 2 feature to predict, get the extra channel
     if settings["extra_channel"] != None:
-        extra_channel = get_netcdf(settings["extra_channel"], data_directory, settings, members=members)
+        extra_channel = get_netcdf(settings["extra_channel"], data_directory, settings, members=members, time_tendency=settings["time_tendency"])
     else:
         extra_channel = None
     #optionally set your data to random values for testing purposes
@@ -184,19 +199,17 @@ def process_input_output(data_directory, settings, input_standard_dict=None,
     #optionally apply area weighting based on latitude and optionally average over target region, so you are predicting a single number for the whole region (detmerined by targ_scalar and error_calc).
     data_output = compute_global_mean(data_output, settings["targ_scalar"], settings["error_calc"])
 
+
     (data_input, data_output, input_standard_dict, output_standard_dict) = process_data(data_feature, data_output, settings, input_standard_dict, output_standard_dict, extra_channel)
-
-  
-
+    persist_err = np.mean(compute_persistance(data_output, settings["lead_time"], settings["error_calc"]))
 
 
-    persist_err = 0
     return data_input, data_output, input_standard_dict, output_standard_dict, persist_err
 
-def compute_persistance(output_array, leadtime, error_type = "mse", w=1):
+def compute_persistance(output_array, leadtime, error_type = "mse"):
     array_past = output_array.shift(time = leadtime).dropna(dim="time")
     array_fut = output_array[:, leadtime:]
-    return metrics.get_persist_errors(array_fut, array_past, error_type)
+    return metrics.get_persist_errors(array_fut.to_numpy(), array_past.to_numpy(), error_type)
 
 #we change our data from having a member and time dimension, to just a sample dimension, since we aren't concerned with differentiating by member
 def stack_to_samples(data_input, data_output, scalar_mode):
@@ -245,7 +258,7 @@ def process_data(data_feature, data_target, settings, input_standard_dict, outpu
         data_input, data_target = xr.align(data_input, data_target, join="inner", exclude = ("lat","lon"), copy=True)
         t_avg = str(settings["averaged_days"]) + "D"
         #here we shift forward the data and then remove the 1st time step to effectively compute a backward downsample (e.g. Jan 1 - Jan 7 data will all go to Jan 1, not all to Jan 7)
-        data_input = (data_input.resample(time = t_avg).mean().shift(time=1))
+        data_input = data_input.resample(time = t_avg).mean().shift(time=1)
         data_input = data_input[:,1:]
         data_output = data_target.resample(time = t_avg).mean()
         data_output.dropna("time")
@@ -265,7 +278,7 @@ def process_data(data_feature, data_target, settings, input_standard_dict, outpu
         data_input, data_output = filter_months(data_input, data_output, settings["months"])
     #Here we optionally standardize the data over all samples (i.e. standardize each grid point)
     data_input, input_standard_dict = standardize_data(data_input, input_standard_dict, settings["standardize_bool"])
-    data_output, output_standard_dict = standardize_data(data_output, output_standard_dict,settings["standardize_bool"])
+    data_output, output_standard_dict = standardize_data(data_output, output_standard_dict,settings["standardize_bool"], settings["median"])
 
     return data_input, data_output, input_standard_dict, output_standard_dict
 
@@ -362,7 +375,7 @@ def extract_region(data, region=None, lat=None, lon=None, mask_builder = 0):
         return data_masked, lat[ilat], lon[ilon]
 
 #given a variable, get the xarray data and add a member dimension, that we will use instead of time/member number later
-def get_netcdf(var, data_directory, settings, members = [], obs_fn = None):
+def get_netcdf(var, data_directory, settings, members = [], obs_fn = None, time_tendency = 0):
 
     da_all = None
 
@@ -372,6 +385,8 @@ def get_netcdf(var, data_directory, settings, members = [], obs_fn = None):
         fp = dir_settings["net_data"] + "/" + var + "_global_1850-1949_ens" + member_text + "_dailyanom_detrend.nc"
         da = xr.open_dataset(fp)["__xarray_dataarray_variable__"].squeeze()
         da = da.fillna(0.0)
+        if time_tendency:
+            da = da.diff(dim = 'time', n = 1, label='lower')
         #if you don't already have members, make a member dimension, then after that add on the new data for each member
         if da_all is None:
             da_all = da.expand_dims(dim={"member": 1}, axis=0)
@@ -445,7 +460,7 @@ def make_land_mask(settings):
 
     return 1
 
-def standardize_data(data, standard_dict, standardize_bool):
+def standardize_data(data, standard_dict, standardize_bool, median=0):
     if standard_dict["data_mean"] is None:
         if standardize_bool:
             standard_dict["data_mean"] = data.mean(axis=(0, 1)).to_numpy().astype(np.float32) #this is the mean over the ensemble for all times
@@ -457,7 +472,9 @@ def standardize_data(data, standard_dict, standardize_bool):
             standard_dict["data_std"] = data.std(axis=(0, 1)).to_numpy().astype(np.float32) #this is the sd over the ensemble for all times per latitude
         else:
             standard_dict["data_std"] = 1.0
-
+    if median: 
+        standardized_data = ((data - data.median(axis=(0, 1)).to_numpy().astype(np.float32))/standard_dict["data_std"]).fillna(0.)
+        return standardized_data, standard_dict
     standardized_data = ((data - standard_dict["data_mean"]) / standard_dict["data_std"]).fillna(0.)
     return standardized_data, standard_dict
 

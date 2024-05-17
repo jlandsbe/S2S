@@ -15,6 +15,9 @@ import cartopy as ct
 import numpy.ma as ma
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
+import cartopy.io.shapereader as shpreader
+import matplotlib.pyplot as plt
+from shapely.ops import cascaded_union
 import palettable
 from matplotlib.colors import ListedColormap
 import matplotlib.colors as clr
@@ -253,7 +256,6 @@ def summarize_skill_score(metrics_dict, error_type):
 
     x_plot = metrics.eval_function(metrics_dict["error_climo"])
     x_climatology_baseline = x_plot.copy()
-    x_climatology_baseline = np.ones(np.shape(x_climatology_baseline))#get rid of this later!!
     plt.axhline(y=0, linewidth=1, linestyle='-', color="k", alpha=alpha)
 
     if error_type == "field":
@@ -261,11 +263,14 @@ def summarize_skill_score(metrics_dict, error_type):
              color="black", alpha=alpha)
         
     x_plot = metrics.eval_function(metrics_dict["error_network"])
-    print(x_plot)
     x_plot = 1. - skill_score_helper(x_plot, x_climatology_baseline, error_type)
-    print(x_plot)
     plt.plot(metrics_dict["analogue_vector"], x_plot, '.-', markersize=marker_size, label='masked analog',
              color="orange", alpha=alpha)
+    
+    x_plot = metrics.eval_function(metrics_dict["error_maxskill"])
+    x_plot = 1. - skill_score_helper(x_plot, x_climatology_baseline, error_type)
+    plt.plot(metrics_dict["analogue_vector"], x_plot, '.-', markersize=marker_size, label='max skill',
+             color="yellowgreen", alpha=alpha)
 
     x_plot = metrics.eval_function(metrics_dict["error_corr"])
     print(x_plot)
@@ -343,7 +348,29 @@ def plot_state_masks(fig, settings, weights_train, lat, lon, region_bool=True, c
                     )
         if region_bool:
             reg = regions.get_region_dict(settings["target_region_name"])
-            rect = mpl.patches.Rectangle((reg["lon_range"][0], reg["lat_range"][0]),
+            if reg == "NorthEast":
+                highlight_states = ['Connecticut', 'Delaware', 'Maine', 'Maryland', 'Massachusetts', 'New Hampshire', 'New Jersey', 'New York', 'Pennsylvania', 'Rhode Island', 'Vermont']
+                shpfilename = shpreader.natural_earth(resolution='110m',
+                                           category='cultural',
+                                           name='admin_1_states_provinces')
+                reader = shpreader.Reader(shpfilename)
+
+                # Create a list to store the geometries of the highlighted states
+                highlighted_states_geometries = []
+
+                # Iterate over the states and add the geometries of the highlighted states to the list
+                for state in reader.records():
+                    state_name = state.attributes['name']
+                    if state_name in highlight_states:
+                        highlighted_states_geometries.append(state.geometry)
+
+                # Merge the geometries into a single geometry
+                merged_geometry = cascaded_union(highlighted_states_geometries)
+
+                # Add the boundary of the merged geometry to the map
+                ax.add_geometries([merged_geometry], ccrs.PlateCarree(), facecolor='none', edgecolor=edgecolor, linewidth=3)
+            else:
+                rect = mpl.patches.Rectangle((reg["lon_range"][0], reg["lat_range"][0]),
                                          reg["lon_range"][1] - reg["lon_range"][0],
                                          reg["lat_range"][1] - reg["lat_range"][0],
                                          transform=ct.crs.PlateCarree(),
@@ -867,14 +894,13 @@ def uncertainty_plots(analogue_vector, error_network, analog_match_error, predic
         '_' + "prediction_spread_weighted" + str(analogue_vector[i]) + '.png', dpi=dpiFig, bbox_inches='tight')
 
 
-def uncertainty_whiskers(analogue_vector, error_network, analog_match_error, prediction_spread, settings, bins = [0,.5]):
+def uncertainty_whiskers(analogue_vector, error_network, analog_match_error, prediction_spread, settings, bins1, bins2):
     plt.style.use("default")
-    for analog_idx in range(len(analogue_vector)):
+    for analog_idx in range(len(analogue_vector)-1):
         # Plot the analog match error vs error in prediction
-        bins_an = list(bins)  # Create a copy of bins to add max value
-
-        x_data = error_network[:, analog_idx]
-        y_data = analog_match_error[:, analog_idx]
+        bins_an = list(bins1[analog_idx+1])  # Create a copy of bins to add max value
+        y_data = error_network[:, analog_idx+1]
+        x_data = analog_match_error[:, analog_idx+1]
         bins_an.append(np.max(x_data)+.000001)
         filtered_data_list = []
         mins = np.zeros((len(bins_an) - 1))
@@ -904,13 +930,13 @@ def uncertainty_whiskers(analogue_vector, error_network, analog_match_error, pre
         if len(filtered_data_list) > 1:
             widths = .5 * np.diff(bins_an)
         else:
-            widths = .5
+            widths = [.5]
         # Plot each box plot
         boxes = ax.boxplot(filtered_data_list, positions=x_positions, patch_artist=True, medianprops=dict(color="black"), widths=widths, labels=np.round(x_positions,1))
         delta = (np.max(maxs) - np.min(mins))/10
         tot_min = max(np.min(mins)-1.3*delta,0)
         plt.ylim(tot_min, np.max(maxs)+1.3*delta)
-        ax.set_xlim(0, np.max(bins_an))  # Setting x-axis limits
+        ax.set_xlim(max([x_positions[0]-.6*widths[0],0]), x_positions[-1]+.502*widths[-1])  # Setting x-axis limits
         ax.set_ylim(tot_min, np.max(maxs)+1.3*delta)  # Setting y-axis limits
         ax.set_xticks(np.round(x_positions,1))
         
@@ -923,22 +949,22 @@ def uncertainty_whiskers(analogue_vector, error_network, analog_match_error, pre
             ax.text(x_positions[i], maxs[i]+delta/1.3, f'{len(data)}', ha='center', va='top', color='black', weight = "bold",
                     path_effects=[pe.withStroke(linewidth=1, foreground="w")])
         # Plot the scatter plot
-        plt.xlabel('RMSE Prediction Error')
-        plt.ylabel('Analog Match Error')
-        plt.title(f'Analog Match Error vs RMSE Prediction Error ({analogue_vector[analog_idx]} analogs)')
+        plt.xlabel('Analog Match Error')
+        plt.ylabel('RMSE Prediction Error')
+        plt.title(f'Analog Match Error vs RMSE Prediction Error ({analogue_vector[analog_idx+1]} analogs)')
         
         # Save the figure
         plt.savefig(dir_settings["figure_diag_directory"] + settings["savename_prefix"] +
-                    '_' + "goodness_of_match_" + str(analogue_vector[analog_idx]) + '.png', dpi=dpiFig, bbox_inches='tight')
+                    '_' + "goodness_of_match_" + str(analogue_vector[analog_idx+1]) + '.png', dpi=dpiFig, bbox_inches='tight')
 
         plt.close(fig)
             #plot the spread of the predictions vs the error in the network
         
 
-        bins_an = list(bins)  # Create a copy of bins to add max value
-        x_data = error_network[:, analog_idx]
-        y_data = prediction_spread[:, analog_idx]
-        z = analog_match_error[:, analog_idx]
+        bins_an = list(bins2[analog_idx+1])  # Create a copy of bins to add max value
+        y_data = error_network[:, analog_idx+1]
+        x_data = prediction_spread[:, analog_idx+1]
+        z = analog_match_error[:, analog_idx+1]
         z_low = np.round(np.min(z),2)
         z_high = np.round(np.max(z),2)
         z = (z - np.min(z))/(np.max(z)-np.min(z))
@@ -970,7 +996,7 @@ def uncertainty_whiskers(analogue_vector, error_network, analog_match_error, pre
         if len(filtered_data_list) > 1:
             widths = .5 * np.diff(bins_an)
         else:
-            widths = .5
+            widths = [.5]
         
         # Plot each box plot
         
@@ -983,20 +1009,21 @@ def uncertainty_whiskers(analogue_vector, error_network, analog_match_error, pre
             color_value = color_data[i]
             rgba_color = cm.PiYG_r(color_value)
             box.set_facecolor((rgba_color[0], rgba_color[1], rgba_color[2], 1.0))  # Set alpha 
+            
 
         delta = (np.max(maxs) - np.min(mins))/10
         tot_min = max(np.min(mins)-1.3*delta,0)
 
         plt.ylim(tot_min, np.max(maxs)+1.3*delta)
-        ax.set_xlim(0, np.max(bins_an))  # Setting x-axis limits
+        ax.set_xlim(max([x_positions[0]-.6*widths[0],0]), x_positions[-1]+.502*widths[-1])  # Setting x-axis limits
         ax.set_ylim(tot_min, np.max(maxs)+1.3*delta)  # Setting y-axis limits
         for i, data in enumerate(filtered_data_list):
             ax.text(x_positions[i], maxs[i]+delta/1.3, f'{len(data)}', ha='center', va='top', color='black', weight="bold", 
                     path_effects=[pe.withStroke(linewidth=1, foreground="w")])
         # Add labels and title
-        plt.xlabel('RMSE Prediction Error')
-        plt.ylabel('Variance of Predictions')
-        plt.title('Variance of Predictions vs Prediction Error (' + str(analogue_vector[analog_idx]) + " analogs)")
+        plt.xlabel('Variance of Predictions')
+        plt.ylabel('RMSE Prediction Error')
+        plt.title('Variance of Predictions vs Prediction Error (' + str(analogue_vector[analog_idx+1]) + " analogs)")
 
         # Display the plot
             # Add colorbar
@@ -1011,5 +1038,5 @@ def uncertainty_whiskers(analogue_vector, error_network, analog_match_error, pre
         # cbar.ax.text(0, 1.05, 'Low Analog Match Error', horizontalalignment='left', verticalalignment='center')
         # cbar.ax.text(1, 1.05, 'High Analog Match Error', horizontalalignment='right', verticalalignment='center')
         plt.savefig(dir_settings["figure_diag_directory"] + settings["savename_prefix"] +
-        '_' + "prediction_spread_weighted" + str(analogue_vector[analog_idx]) + '.png', dpi=dpiFig, bbox_inches='tight')
+        '_' + "prediction_spread_weighted" + str(analogue_vector[analog_idx+1]) + '.png', dpi=dpiFig, bbox_inches='tight')
         plt.close(fig)

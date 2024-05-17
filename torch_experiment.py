@@ -18,11 +18,12 @@ import model_diagnostics_torch
 import base_directories
 import plots
 import warnings
-from torch_model import CustomDataset, TorchModel_base, TorchModel_gate, MaskTrainer, EarlyStopping, GateTrainer, prepare_device
+from torch_model import CustomDataset, TorchModel_base, TorchModel_gate,TorchModel_gatedMap,CombinedGateModel,MaskTrainer, EarlyStopping, GateTrainer, prepare_device
 from torch.utils.data import DataLoader
 import torch
 import torchinfo
 from keras.utils.vis_utils import plot_model
+import matplotlib.pyplot as plt
 warnings.filterwarnings(action='ignore', message='Mean of empty slice')
 
 __author__ = "Jamin K. Rader, Elizabeth A. Barnes, and Randal J. Barnes"
@@ -273,69 +274,54 @@ def train_experiments(
                 else:
                      raise NotImplementedError("no such model coded yet")
                 if settings["model_type"] == "interp_model":
-                    if settings["state_masks"] == 1:
-                            (weights_val, dissimilarities_val, prediction_val, gates, branches) = build_model.parse_model(x_val, model.layers[2], model.layers[3], model.layers[4],) #check on whether these are the right model layers
-                            #xval is 2 x val_batch x lat x lon x channel
-                            #check weights_val
-                            mean_weights_val = np.mean(weights_val, axis=0)[np.newaxis, :, :, :]
-                            for i in range(0,len(weights_val), int(len(weights_val)/5)):
-                                nm = "_combined_mask_" + str(i)
-                                nm2 = "_gate_" + str(np.argmax(gates[i])) +  "_branches_" + str(i)
-                                nm3 = "_soi_sample_" + str(i) + "_gates_" + str(np.mean(gates,axis=0))
-                                #model_diagnostics.visualize_interp_model(settings, weights_val[i], lat, lon, sv = nm, clims = (round((np.mean(np.min(weights_val, axis=(1, 2)))),6), round(np.mean(np.max(weights_val, axis=(1, 2))),6)))
-                                model_diagnostics_torch.visualize_interp_model(settings, x_val[0][i], lat, lon, sv = nm3)
-                                model_diagnostics_torch.visualize_interp_model(settings, branches[i], lat, lon, sv = nm2, ttl = gates[i])
-                                print("done")
-                            #weights_val = (2500, 72, 144, 1), 2500 coming from validation batch size
-                    #this returns the mask! So could cut it here to just get the mask
-                    else:
                         map_layer = getattr(model, "bias_only")
                         biases = map_layer.data
                         weights_val = biases.numpy().reshape(np.shape(analog_input)[1:])
-                        if settings["gates"] or 1:
-                            reg_map = np.zeros(np.shape(weights_val))
-                            reg_map = build_data.extract_region(reg_map, regions.get_region_dict(settings["target_region_name"]), lat=lat, lon=lon, mask_builder = 1)
-                            map_options = np.stack([weights_val, reg_map])
+
+                        if settings["gates"]:
+                            reg_map_na = np.zeros(np.shape(weights_val))
+                            reg_map_na = build_data.extract_region(reg_map_na, regions.get_region_dict("n_atlantic"), lat=lat, lon=lon, mask_builder = 1)
+                            reg_map_np = np.zeros(np.shape(weights_val))
+                            reg_map_np = build_data.extract_region(reg_map_np, regions.get_region_dict("n_pacific"), lat=lat, lon=lon, mask_builder = 1)
+                            map_options = np.stack([reg_map_na, reg_map_np])
+                            model_diagnostics_torch.visualize_interp_model(settings, np.squeeze(np.stack([reg_map_na, reg_map_np], axis=-1)), lat, lon)
                             #Here is where I can run the network
-                            gate_model = TorchModel_gate(settings, np.shape(soi_train_input)[1:], map_options)
+                            gate_model = CombinedGateModel(settings, np.shape(soi_train_input)[1:], map_options)
                             criterion = torch.nn.MSELoss()
                             optimizer = torch.optim.Adam(model.parameters(), lr=settings["interp_learning_rate"])
                             device = prepare_device()
                             metric_funcs = []
-                            trainer = MaskTrainer(
+                            trainer = GateTrainer(
                                 gate_model,
                                 criterion,
                                 metric_funcs,
                                 optimizer,
-                                max_epochs=settings["max_epochs"],
+                                max_epochs=settings["gate_max_epochs"],
                                 data_loader=train_loader,
                                 validation_data_loader=val_loader,
                                 device=device,
                                 settings=settings,
         )
-                            model.to(device)
+                            gate_model.to(device)
                             trainer.fit()
 
+                            gate_model.eval()
+                            with torch.no_grad():
+                                soi_test_input_tensor = torch.from_numpy(soi_test_input).float()
+                                gate_tensor = gate_model.gate_model(soi_test_input_tensor)
+                                gates = gate_tensor.cpu().numpy()
+                            plt.hist(np.argmax(gates,axis=-1), align='mid', bins=[-.25,.25,.75,1.25], edgecolor='black', linewidth=1.2, color='cornflowerblue')
+                            plt.title("Gate Distribution: 0 = NA, 1 = NP")
+                            plt.savefig(dir_settings["figure_directory"] + settings["savename_prefix"] +
+                    '_gate_distribution.png', dpi=300, bbox_inches='tight')
                         model_diagnostics_torch.visualize_interp_model(settings, weights_val, lat, lon)
                 else:
                     weights_val = None
-                #this is where I will do some evaluation
-                #first I will pass in my soi_test_input to parse_model to get 238 weights out
-                #then for each of these soi_test_inputs I will multiply the mask by the one soi_test_input and by all the possible analogs (could use analog_inputs)
-                #then for each soi_test_inputs I will also find the difference in the same indexed soi_test_output and each of the analog_outputs
-                #Then I will compare all the inputs with outputs (MAE?) and lastly take the mean
-                #I will repeat the process above, but with my own mask
-                #This mask will be found by finding the brightest spot on the soi_test_input and making a box around it of size mjo_shape
-                #or actually since this is in order, I can just use the same starting point and roll my mask along, just like I do in my build mjo data
-                #I will do this for all SOIs and those will be my new 238 weights out
-                #then I repeat the process
-                #compare end results
+
 
 
                 # PLOT MODEL EVALUATION METRICS
-                if settings["state_masks"] == 1:
-                    weights_val = None 
-                if settings["gates"] or 1:
+                if settings["gates"]:
                     metrics_dict = model_diagnostics_torch.visualize_metrics(settings, model, soi_test_input, soi_test_output,
                                                                     analog_input, analog_output, lat,
                                                                     lon, weights_val, persist_err,

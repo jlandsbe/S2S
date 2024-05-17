@@ -101,6 +101,8 @@ class TorchModel_base(nn.Module):
         output = self.scaler_train(diff)
         return output, map
 
+
+#come up with gate
 class TorchModel_gate(nn.Module):
     def __init__(self, settings, input_dim1, map_array = []):
         super(TorchModel_gate, self).__init__()
@@ -108,9 +110,13 @@ class TorchModel_gate(nn.Module):
         self.map_array = map_array
         self.settings = settings
         self.conv1 = torch.nn.Conv2d(input_dim1[-1], 16, 3)
+        self.bn1 = nn.BatchNorm2d(16)
         self.conv2 = torch.nn.Conv2d(16,32, 3)
+        self.bn2 = nn.BatchNorm2d(32)
         self.conv3 = torch.nn.Conv2d(32, 64, 3)
+        self.bn3 = nn.BatchNorm2d(64)
         self.conv4 = torch.nn.Conv2d(64, 128, 3)
+        self.bn4 = nn.BatchNorm2d(128)
         self.dropout_cnn = nn.Dropout(0.2)
         self.dropout_fc = nn.Dropout(0.2)
 
@@ -120,11 +126,8 @@ class TorchModel_gate(nn.Module):
         self.lin_1 = nn.Linear(16, 16)
         self.lin_2 = nn.Linear(16, 16)
         self.g = nn.Linear(16, len(self.map_array))
+        self.gates = self.gates = 1/len(self.map_array)* torch.ones(len(self.map_array))
 
-        self.branches = torch.Tensor(self.map_array.reshape((len(self.map_array),np.product(input_dim1))))
-
-        # Define layers for x2
-        self.scaler_train = nn.Linear(1, 1)
     def _calculate_conv_output_dim(self, input_dim):
         x = torch.randn(1, *input_dim)
         x = x.permute(0, 3, 1, 2)  # Change from NHWC to NCHW
@@ -134,21 +137,42 @@ class TorchModel_gate(nn.Module):
         x = F.max_pool2d(F.relu(self.conv4(x)), (2, 2))
         _, _, height, width = x.shape
         return height, width
-    def forward(self, x1, x2):
+    def forward(self, x1):
         x1_cnn = x1.permute(0, 3, 1, 2)
-        x = F.max_pool2d(F.relu(self.conv1(x1_cnn)), (2, 2))
-        x = F.max_pool2d(F.relu(self.conv2(x)), (2, 2))
-        x = F.max_pool2d(F.relu(self.conv3(x)), (2, 2))
-        x = F.max_pool2d(F.relu(self.conv4(x)), (2, 2))
+        x1_cnn = x1.permute(0, 3, 1, 2)
+        x = F.max_pool2d(F.relu(self.bn1(self.conv1(x1_cnn))), (2, 2))
+        x = F.max_pool2d(F.relu(self.bn2(self.conv2(x))), (2, 2))
+        x = F.max_pool2d(F.relu(self.bn3(self.conv3(x))), (2, 2))
+        x = F.max_pool2d(F.relu(self.bn4(self.conv4(x))), (2, 2))
         x = x.reshape(x.size(0), -1)
         x = F.relu(self.lin_cnn(x))
         x = F.relu(self.lin_1(self.dropout_fc(x)))
         x = F.relu(self.lin_2(self.dropout_fc(x)))
         gate = self.g(self.dropout_fc(x))
         T = self.settings["temperature"] #this is actually inverse temperature as T increases, get harder max
+        if self.training:
+            noise_factor = .0*gate.mean().item()  # Adjust this to add more or less noise
+            noise = torch.randn_like(gate) * noise_factor
+            gate = gate + noise
         gate = gate*T
         gate = F.softmax(gate)
-        x = torch.mul(gate,self.branches)
+        self.gates = gate
+        return self.gates
+
+#given a gate, pick the map an evaluate loss
+class TorchModel_gatedMap(nn.Module):
+    def __init__(self, settings, input_dim1, gates, map_array = []):
+        super(TorchModel_gatedMap, self).__init__()
+        self.input_dim1 = input_dim1
+        self.map_array = map_array
+        self.settings = settings
+        self.gate =  gates
+        self.branches = torch.Tensor(self.map_array.reshape((len(self.map_array),np.product(input_dim1))))
+
+        # Define layers for x2
+        self.scaler_train = nn.Linear(1, 1)
+    def forward(self, x1, x2):
+        x = torch.matmul(self.gate.view(1, -1),self.branches)
         new_size = (x.size()[0],) + self.input_dim1
         map = x.reshape(new_size)
         map = map / map.mean(dim=(1, 2, 3), keepdim=True)
@@ -157,6 +181,18 @@ class TorchModel_gate(nn.Module):
         diff = ((torch.square((soi_weighted - analog_weighted)).sum(dim=(1,2,3)))) / np.product(self.input_dim1)
         diff = diff.unsqueeze(1)
         output = self.scaler_train(diff)
+        #output = torch.matmul(output, self.gate.view(-1, 1))
+        return output, map
+    
+class CombinedGateModel(nn.Module):
+    def __init__(self, settings, input_dim1, map_array=[]):
+        super(CombinedGateModel, self).__init__()
+        self.gate_model = TorchModel_gate(settings, input_dim1, map_array)
+        self.map_model = TorchModel_gatedMap(settings, input_dim1, self.gate_model.gates, map_array)
+
+    def forward(self, x1, x2):
+        gate = self.gate_model(x1)
+        output, map = self.map_model(x1, x2)
         return output, map, gate
 
 class MetricTracker:

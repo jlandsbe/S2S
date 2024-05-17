@@ -215,7 +215,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                         error_network[:, :] = x[:,0,:]
                         analog_match_error = x[:,1,:] 
                         prediction_spread = x[:,2,:]
-                        plots.uncertainty_whiskers(analogue_vector, error_network, analog_match_error, prediction_spread, settings, bins = [0, .3, .6,.9,1.5])
+                        plots.uncertainty_whiskers(analogue_vector, error_network, analog_match_error, prediction_spread, settings, bins = [0, .1, .3, 1])
                     else:
                         x = np.array(run_complex_operations(metrics.mse_operation,
                                                                     soi_iterable_instance,
@@ -224,7 +224,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                         error_network[:, :] = x[:,0,:]
                         analog_match_error = x[:,1,:] 
                         prediction_spread = x[:,2,:]
-                        plots.uncertainty_whiskers(analogue_vector, error_network, analog_match_error, prediction_spread, settings, bins = [0, .3, .6,.9, 1.5])
+                        plots.uncertainty_whiskers(analogue_vector, error_network, analog_match_error, prediction_spread, settings, bins = [0, .1, .3, 1])
                     print("finished network error")
     # -----------------------
     # ANN-Analog

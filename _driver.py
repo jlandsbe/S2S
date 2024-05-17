@@ -14,8 +14,7 @@ __author__ = "Jamin K. Rader, Elizabeth A. Barnes, and Randal J. Barnes"
 __version__ = "30 March 2023"
 
 # List of experiments to run
-EXP_NAME_LIST = (
-    "exp300_test_pytorch_2_gate_test",)
+EXP_NAME_LIST = ("certain_members_classification",)
 
 if __name__ == "__main__":
 
