@@ -175,11 +175,11 @@ def process_input_output(data_directory, settings, input_standard_dict=None,
                          output_standard_dict=None, obs_info=None, members=None):
 
     # get the input (feautre) and output (target) data as xarrays
-    data_target = get_netcdf(settings["target_var"], data_directory, settings, members=members)
-    data_feature = get_netcdf(settings["feature_var"], data_directory, settings, members=members)
+    data_target = get_netcdf(settings["target_var"], data_directory, settings, members=members, new = settings["new_detrend"])
+    data_feature = get_netcdf(settings["feature_var"], data_directory, settings, members=members, new = settings["new_detrend"])
     #if you are using 2 feature to predict, get the extra channel
     if settings["extra_channel"] != None:
-        extra_channel = get_netcdf(settings["extra_channel"], data_directory, settings, members=members, time_tendency=settings["time_tendency"])
+        extra_channel = get_netcdf(settings["extra_channel"], data_directory, settings, members=members, time_tendency=settings["time_tendency"], new = settings["new_detrend"])
     else:
         extra_channel = None
     #optionally set your data to random values for testing purposes
@@ -375,14 +375,14 @@ def extract_region(data, region=None, lat=None, lon=None, mask_builder = 0):
         return data_masked, lat[ilat], lon[ilon]
 
 #given a variable, get the xarray data and add a member dimension, that we will use instead of time/member number later
-def get_netcdf(var, data_directory, settings, members = [], obs_fn = None, time_tendency = 0):
+def get_netcdf(var, data_directory, settings, members = [], obs_fn = None, time_tendency = 0, new = ""):
 
     da_all = None
 
     for ens in members:
         member_text = str(ens)
         print('   ensemble member = ' + member_text)
-        fp = dir_settings["net_data"] + "/" + var + "_global_1850-1949_ens" + member_text + "_dailyanom_detrend.nc"
+        fp = dir_settings["net_data"] + "/" + var + "_global_1850-1949_ens" + member_text + "_dailyanom_detrend" + new + ".nc"
         da = xr.open_dataset(fp)["__xarray_dataarray_variable__"].squeeze()
         da = da.fillna(0.0)
         if time_tendency:

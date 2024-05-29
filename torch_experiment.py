@@ -244,7 +244,7 @@ def train_experiments(
                     drop_last=False,
 )
                     model = TorchModel_base(settings, np.shape(soi_train_input)[1:])
-                    criterion = torch.nn.MSELoss()
+                    criterion = torch.nn.MSELoss(reduction='none')
                     optimizer = torch.optim.Adam(model.parameters(), lr=settings["interp_learning_rate"])
                     device = prepare_device()
                     metric_funcs = []

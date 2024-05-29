@@ -14,22 +14,22 @@ def get_region_dict(region=None):
             "lon_range": [0, 360],
         },
 
-        "northern hemisphere": {
+        "northern_hemisphere": {
             "lat_range": [0, 90],
             "lon_range": [0, 360],
         },
 
-        "southern hemisphere": {
+        "southern_hemisphere": {
             "lat_range": [-90, 0],
             "lon_range": [0, 360],
         },
 
-        "north atlantic": {
+        "north_atlantic": {
             "lat_range": [40, 60],
             "lon_range": [360 - 70, 360 - 10],
         },
 
-        "eastern europe": {
+        "eastern_europe": {
             "lat_range": [40, 60],
             "lon_range": [0, 30],
         },

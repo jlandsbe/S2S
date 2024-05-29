@@ -21,22 +21,7 @@ def compute_best_analogs(inputs, n_analogs):
     return i_analogs  #this returns the best analogs' indices based on mimse
 
 #make change
-def mse_operation(inputs):
-    assert type(inputs["n_analogs"]) is not int # should be a list-type
-    i_analogs = compute_best_analogs(inputs, inputs["max_analogs"])
-    results = []
-    if inputs["uncertainties"]:
-        input_diff = []
-        output_spread = []
-        for n_analogs in inputs["n_analogs"]:
-            results.append(get_analog_errors(inputs["soi_output_sample"], np.mean(inputs["analog_output"][i_analogs[:n_analogs]]), "mse"))
-            input_diff.append((np.mean((inputs["soi_input_sample"] - inputs["analog_input"][i_analogs[:n_analogs]])**2))**.5)
-            output_spread.append(np.mean(np.var(inputs["analog_output"][i_analogs[:n_analogs]],axis=0)))
-        return np.stack(results, axis=0), np.stack(input_diff, axis=0), np.stack(output_spread, axis=0)
-    else:
-        for n_analogs in inputs["n_analogs"]:
-            results.append(get_analog_errors(inputs["soi_output_sample"], np.mean(inputs["analog_output"][i_analogs[:n_analogs]]), "mse"))
-        return np.stack(results, axis=0)
+
 
 def field_operation(inputs):
     assert type(inputs["n_analogs"]) is not int # should be a list-type
@@ -101,12 +86,39 @@ def classification_operation(inputs):
         results.append(get_analog_errors(inputs["soi_output_sample"], np.mean(inputs["analog_output"][i_analogs[:n_analogs]]), "classify")*1.0)
     return np.stack(results, axis=0)
 
-def super_classification_operation(inputs):
+def mse_operation(inputs):
+    assert type(inputs["n_analogs"]) is not int # should be a list-type
     i_analogs = compute_best_analogs(inputs, inputs["max_analogs"])
     results = []
-    for n_analogs in inputs["n_analogs"]:
-        results.append(get_analog_errors(inputs["soi_output_sample"], np.round(np.mean(inputs["analog_output"][i_analogs[:n_analogs]], axis=0)), "mae"))
-    return np.stack(results, axis=0)
+    if inputs["uncertainties"]:
+        input_diff = []
+        output_spread = []
+        for n_analogs in inputs["n_analogs"]:
+            results.append(get_analog_errors(inputs["soi_output_sample"], np.mean(inputs["analog_output"][i_analogs[:n_analogs]]), "mse"))
+            input_diff.append((np.mean((inputs["soi_input_sample"] - inputs["analog_input"][i_analogs[:n_analogs]])**2))**.5)
+            output_spread.append(np.mean(np.var(inputs["analog_output"][i_analogs[:n_analogs]],axis=0)))
+        return np.stack(results, axis=0), np.stack(input_diff, axis=0), np.stack(output_spread, axis=0)
+    else:
+        for n_analogs in inputs["n_analogs"]:
+            results.append(get_analog_errors(inputs["soi_output_sample"], np.mean(inputs["analog_output"][i_analogs[:n_analogs]]), "mse"))
+        return np.stack(results, axis=0)
+
+def super_classification_operation(inputs):
+    assert type(inputs["n_analogs"]) is not int # should be a list-type
+    i_analogs = compute_best_analogs(inputs, inputs["max_analogs"])
+    results = []
+    if inputs["uncertainties"]:
+        input_diff = []
+        output_spread = []
+        for n_analogs in inputs["n_analogs"]:
+            results.append(get_analog_errors(inputs["soi_output_sample"], np.round(np.median(inputs["analog_output"][i_analogs[:n_analogs]], axis=0)), "mae"))
+            input_diff.append((np.mean((inputs["soi_input_sample"] - inputs["analog_input"][i_analogs[:n_analogs]])**2))**.5)
+            output_spread.append(np.mean(np.var(inputs["analog_output"][i_analogs[:n_analogs]],axis=0)))
+        return np.stack(results, axis=0), np.stack(input_diff, axis=0), np.stack(output_spread, axis=0)
+    else:
+        for n_analogs in inputs["n_analogs"]:
+            results.append(get_analog_errors(inputs["soi_output_sample"], np.round(np.mean(inputs["analog_output"][i_analogs[:n_analogs]], axis=0)), "mae"))
+        return np.stack(results, axis=0)
 
 #do we want this to be weighted?
 def mse(analog, truth):
@@ -164,7 +176,10 @@ def get_analog_errors(soi, analog_prediction, type="mse"):
         return diff**.5
     if type=="mae":
         diff = np.abs(soi - analog_prediction)
-        return np.average(diff, axis=(-1,-2))
+        if len(np.shape(diff))>1:
+            return np.average(diff, axis=(-1,-2))
+        else:
+            return diff
     else:
         raise Exception("Sorry, this error calculation type is not implemented.")
 

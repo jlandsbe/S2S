@@ -193,10 +193,16 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                                                             analog_output,
                                                             mask, 1, gates = gates)
                     if settings["median"]:
-                        error_network[:, :] = run_complex_operations(metrics.super_classification_operation,
+                        net_err = np.array(run_complex_operations(metrics.super_classification_operation,
                                                                     soi_iterable_instance,
                                                                     pool,
-                                                                    chunksize=soi_input.shape[0]//n_processes,)
+                                                                    chunksize=soi_input.shape[0]//n_processes,))
+                        error_network[:, :] = net_err[:,0,:]
+                        analog_match_error = net_err[:,1,:] 
+                        prediction_spread = net_err[:,2,:]
+                        # bins1 = np.percentile(analog_match_error, [0, 20, 40, 60, 80], axis = 0).T
+                        # bins2 = np.percentile(prediction_spread, [0, 20, 50, 60, 80], axis = 0).T
+                        # plots.uncertainty_whiskers(analogue_vector, error_network, analog_match_error, prediction_spread, settings, bins1 = bins1, bins2 = bins2)
                     elif settings["error_calc"] == "classify":
                         error_network[:, :] = run_complex_operations(metrics.classification_operation,
                                                                     soi_iterable_instance,
@@ -204,35 +210,35 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                                                                     chunksize=soi_input.shape[0]//n_processes,)
                     elif settings["error_calc"] == "map":
                         #number of analogs x lat x lon
-                        x  = run_complex_operations(metrics.map_operation,
+                        net_err  = run_complex_operations(metrics.map_operation,
                                                                     soi_iterable_instance,
                                                                     pool,
                                                                     chunksize=soi_input.shape[0]//n_processes,)
-                        error_network = x[0]
-                        analog_match_error = x[1]
-                        prediction_spread = x[2]
+                        error_network = net_err[0]
+                        analog_match_error = net_err[1]
+                        prediction_spread = net_err[2]
                     elif settings["error_calc"] == "field":
-                        x = np.array(run_complex_operations(metrics.field_operation,
+                        net_err = np.array(run_complex_operations(metrics.field_operation,
                                                                     soi_iterable_instance,
                                                                     pool,
                                                                     chunksize=soi_input.shape[0]//n_processes,))
-                        error_network[:, :] = x[:,0,:]
-                        analog_match_error = x[:,1,:] 
-                        prediction_spread = x[:,2,:]
+                        error_network[:, :] = net_err[:,0,:]
+                        analog_match_error = net_err[:,1,:] 
+                        prediction_spread = net_err[:,2,:]
                         bins1 = np.percentile(analog_match_error, [0, 20, 50, 70, 90], axis=0).T
                         bins2 = np.percentile(prediction_spread, [0, 20, 50, 70, 90], axis=0).T
                         plots.uncertainty_whiskers(analogue_vector, error_network, analog_match_error, prediction_spread, settings, bins1 = bins1, bins2 = bins2)
                     else:
-                        x = np.array(run_complex_operations(metrics.mse_operation,
+                        net_err = np.array(run_complex_operations(metrics.mse_operation,
                                                                     soi_iterable_instance,
                                                                     pool,
                                                                     chunksize=soi_input.shape[0]//n_processes,))
-                        error_network[:, :] = x[:,0,:]
-                        analog_match_error = x[:,1,:] 
-                        prediction_spread = x[:,2,:]
+                        error_network[:, :] = net_err[:,0,:]
+                        analog_match_error = net_err[:,1,:] 
+                        prediction_spread = net_err[:,2,:]
                         bins1 = np.percentile(analog_match_error, [0, 20, 40, 60, 80], axis = 0).T
                         bins2 = np.percentile(prediction_spread, [0, 20, 50, 60, 80], axis = 0).T
-                        plots.uncertainty_whiskers(analogue_vector, error_network, analog_match_error, prediction_spread, settings, bins1 = bins1, bins2 = bins2)
+                        # plots.uncertainty_whiskers(analogue_vector, error_network, analog_match_error, prediction_spread, settings, bins1 = bins1, bins2 = bins2)
                     print("finished network error")
     # -----------------------
     # ANN-Analog
@@ -361,25 +367,35 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
         
     # -----------------------
     # Simple CUSTOM CORRELATION REGION correlation baseline (not needed)
-    if "correlation_region_name" in settings.keys() and my_masks != None:
+    if "correlation_region_name" in settings.keys():
         with Pool(n_processes) as pool:
-            # soi_reg, lat_reg, lon_reg = build_data.extract_region(soi_input, regions.get_region_dict(
-            #     settings["correlation_region_name"]), lat=lat, lon=lon)
-            # analog_reg, __, __ = build_data.extract_region(analog_input,
-            #                                             regions.get_region_dict(settings["correlation_region_name"]),
-            #                                             lat=lat, lon=lon)
-            # sqrt_area_weights = np.sqrt(np.cos(np.deg2rad(lat_reg))[np.newaxis, :, np.newaxis, np.newaxis])
-            soi_iterable_instance = soi_iterable_masks(n_analogues,
+            cust_reg_map = np.zeros(np.shape(mask))
+            cust_reg_map = build_data.extract_region(cust_reg_map, regions.get_region_dict(settings["correlation_region_name"]), lat=lat, lon=lon, mask_builder = 1)
+            if settings["median"] or settings["error_calc"]=="mse":
+                soi_iterable_instance = soi_iterable(n_analogues,
                                                 soi_input,
                                                 soi_output,
                                                 analog_input,
                                                 analog_output,
-                                                my_masks)
+                                                cust_reg_map, uncertainties=1)
+            else:
+                soi_iterable_instance = soi_iterable(n_analogues,
+                                                soi_input,
+                                                soi_output,
+                                                analog_input,
+                                                analog_output,
+                                                cust_reg_map)
             if settings["median"]:
-                error_customcorr[:, :] = run_complex_operations(metrics.super_classification_operation,
+                cust_err = np.array(run_complex_operations(metrics.super_classification_operation,
                                                             soi_iterable_instance,
                                                             pool,
-                                                            chunksize=soi_input.shape[0]//n_processes,)
+                                                            chunksize=soi_input.shape[0]//n_processes,))
+                error_customcorr[:, :] = cust_err[:,0,:]
+                baseline_analog_match_error = cust_err[:,1,:] 
+                baseline_prediction_spread = cust_err[:,2,:]
+                # plots.uncertainty_whiskers(analogue_vector, error_network, analog_match_error, prediction_spread, settings, 
+                #                            baseline_error = error_customcorr, baseline_analog_match = baseline_analog_match_error, baseline_spread = baseline_prediction_spread)
+            
             elif settings["error_calc"] == "classify":
                 error_customcorr[:, :] = run_complex_operations(metrics.classification_operation,
                                                             soi_iterable_instance,
@@ -397,10 +413,13 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                                                             pool,
                                                             chunksize=soi_input.shape[0]//n_processes,)
             else:
-                error_customcorr[:, :] = run_complex_operations(metrics.mse_operation,
+                cust_err = np.array(run_complex_operations(metrics.mse_operation,
                                                             soi_iterable_instance,
                                                             pool,
-                                                            chunksize=soi_input.shape[0]//n_processes,)
+                                                            chunksize=soi_input.shape[0]//n_processes,))
+                error_customcorr[:, :] = cust_err[:,0,:]
+                baseline_analog_match_error = cust_err[:,1,:] 
+                baseline_prediction_spread = cust_err[:,2,:]
     
     # -----------------------
     # Custom baseline (e.g. mean evolution)
@@ -413,18 +432,28 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
 
     # -----------------------
     # Random baseline
+    random_output_spread = np.zeros((len_analogues, soi_input.shape[0])) * np.nan
     for idx_analog, n_analog in enumerate(n_analogues):
         i_analogue = rng.choice(np.arange(0, analog_output.shape[0]),
                                 size=(n_analog, soi_output.shape[0]), replace=True)
         if settings["error_calc"] == "super_classify":
             error_random[idx_analog, :] = metrics.get_analog_errors(soi_output,
                                                     np.round(np.mean(analog_output[i_analogue], axis=0)), settings["error_calc"])
+            
         elif settings["error_calc"] == "map":
             np.append(error_random,metrics.get_analog_errors(soi_output,
                                                     np.median(analog_output[i_analogue], axis=0), settings["error_calc"]))
         else: 
             error_random[idx_analog, :] = metrics.get_analog_errors(soi_output,
                                                     np.mean(analog_output[i_analogue], axis=0), settings["error_calc"])
+            if len(np.shape(analog_output)) > 2:
+                random_output_spread[idx_analog,:] = (np.mean(np.var(analog_output[i_analogue],axis=0), axis=(-1,-2)))
+            else:
+                random_output_spread[idx_analog,:] = (np.var(analog_output[i_analogue], axis=0))
+    
+    plots.uncertainty_whiskers(analogue_vector, error_network, analog_match_error, prediction_spread, settings, 
+                                        baseline_error = error_customcorr, baseline_analog_match = baseline_analog_match_error, 
+                                        baseline_spread = baseline_prediction_spread, random_error = np.array(error_random).T, random_spread = random_output_spread.T)
 
     # -----------------------
     # Climatology
@@ -447,41 +476,44 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
 
         # -----------------------
     # Max Skill
-    error_maxskill = np.zeros((len_analogues, soi_input.shape[0])).T * np.nan
-    with Pool(n_processes) as pool:
-        no_weights = np.ones(np.shape(soi_output[:,:,:,np.newaxis])[1:])
-        soi_iterable_instance = soi_iterable(n_analogues,
-                                                soi_output[:,:,:,np.newaxis],
-                                                soi_output,
-                                                analog_output[:,:,:,np.newaxis],
-                                                analog_output,
-                                                no_weights)
-        if settings["median"]:
-            error_maxskill[:, :] = run_complex_operations(metrics.super_classification_operation,
-                                                            soi_iterable_instance,
-                                                            pool,
-                                                            chunksize=soi_input.shape[0]//n_processes,)
-        elif settings["error_calc"] == "classify":
-            error_maxskill[:, :] = run_complex_operations(metrics.classification_operation,
-                                                            soi_iterable_instance,
-                                                            pool,
-                                                            chunksize=soi_input.shape[0]//n_processes,)
-        elif settings["error_calc"] == "map":
-                #number of analogs x time x lat x lon
-                error_maxskill = run_complex_operations(metrics.map_operation,
-                                                            soi_iterable_instance,
-                                                            pool,
-                                                            chunksize=soi_input.shape[0]//n_processes,)
-        elif settings["error_calc"] == "field":
-            error_maxskill[:, :] = run_complex_operations(metrics.field_operation,
-                                                            soi_iterable_instance,
-                                                            pool,
-                                                            chunksize=soi_input.shape[0]//n_processes,)
-        else:
-            error_maxskill[:, :] = run_complex_operations(metrics.mse_operation,
-                                                            soi_iterable_instance,
-                                                            pool,
-                                                            chunksize=soi_input.shape[0]//n_processes,)
+    if len(np.shape(soi_output)) > 1:
+        error_maxskill = np.zeros((len_analogues, soi_input.shape[0])).T * np.nan
+        with Pool(n_processes) as pool:
+            no_weights = np.ones(np.shape(soi_output[:,:,:,np.newaxis])[1:])
+            soi_iterable_instance = soi_iterable(n_analogues,
+                                                    soi_output[:,:,:,np.newaxis],
+                                                    soi_output,
+                                                    analog_output[:,:,:,np.newaxis],
+                                                    analog_output,
+                                                    no_weights)
+            if settings["median"]:
+                error_maxskill[:, :] = run_complex_operations(metrics.super_classification_operation,
+                                                                soi_iterable_instance,
+                                                                pool,
+                                                                chunksize=soi_input.shape[0]//n_processes,)
+            elif settings["error_calc"] == "classify":
+                error_maxskill[:, :] = run_complex_operations(metrics.classification_operation,
+                                                                soi_iterable_instance,
+                                                                pool,
+                                                                chunksize=soi_input.shape[0]//n_processes,)
+            elif settings["error_calc"] == "map":
+                    #number of analogs x time x lat x lon
+                    error_maxskill = run_complex_operations(metrics.map_operation,
+                                                                soi_iterable_instance,
+                                                                pool,
+                                                                chunksize=soi_input.shape[0]//n_processes,)
+            elif settings["error_calc"] == "field":
+                error_maxskill[:, :] = run_complex_operations(metrics.field_operation,
+                                                                soi_iterable_instance,
+                                                                pool,
+                                                                chunksize=soi_input.shape[0]//n_processes,)
+            else:
+                error_maxskill[:, :] = run_complex_operations(metrics.mse_operation,
+                                                                soi_iterable_instance,
+                                                                pool,
+                                                                chunksize=soi_input.shape[0]//n_processes,)
+    else:
+        error_maxskill = np.zeros((len_analogues, soi_input.shape[0])).T
 
 
 
