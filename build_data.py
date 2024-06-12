@@ -179,7 +179,9 @@ def process_input_output(data_directory, settings, input_standard_dict=None,
     data_feature = get_netcdf(settings["feature_var"], data_directory, settings, members=members, new = settings["new_detrend"])
     #if you are using 2 feature to predict, get the extra channel
     if settings["extra_channel"] != None:
-        extra_channel = get_netcdf(settings["extra_channel"], data_directory, settings, members=members, time_tendency=settings["time_tendency"], new = settings["new_detrend"])
+        extra_channel = []
+        for chan_nam in settings["extra_channel"]:
+            extra_channel.append(get_netcdf(chan_nam, data_directory, settings, members=members, time_tendency=settings["time_tendency"], new = settings["new_detrend"]))
     else:
         extra_channel = None
     #optionally set your data to random values for testing purposes
@@ -317,7 +319,8 @@ def add_extra_channel(data_in, settings, extra_chan):
         return data_in.expand_dims(dim={"channel": 1}, axis=-1).copy()
     else:
         data_in = data_in.expand_dims(dim={"channel": 1}, axis=-1).copy()
-        data_in = xr.concat([data_in, extra_chan], dim = "channel")
+        for channel in extra_chan:
+            data_in = xr.concat([data_in, extra_chan], dim = "channel")
         # d_present, d_past = xr.align(data_in[:, settings["extra_channel"]:, :, :],
         #                              data_in[:, :-settings["extra_channel"], :, :], join="override", copy=True)
         # data_in = d_present.expand_dims(dim={"channel": 2}, axis=-1).copy()

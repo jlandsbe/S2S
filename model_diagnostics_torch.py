@@ -15,7 +15,7 @@ import os
 import warnings
 from shapely.errors import ShapelyDeprecationWarning
 import matplotlib.animation as animation
-from scipy.stats import linregress
+import scipy.stats
 warnings.filterwarnings(action='ignore', message='Mean of empty slice')
 warnings.filterwarnings(action='ignore', message='All-NaN slice encountered')
 warnings.filterwarnings("ignore", category=ShapelyDeprecationWarning)
@@ -105,6 +105,15 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
     if settings["median"]:
         soi_output = 1.0*(soi_output > 0)
         analog_output = 1.0*(analog_output > 0)
+        #soi_output = soi_output - 1.0*(soi_output <-)
+
+    if settings["percentiles"]!=None:
+        low_cap_an = np.percentile(analog_output, settings["percentiles"][0], axis = 0)
+        high_base_an = np.percentile(analog_output, settings["percentiles"][1], axis = 0)
+        low_cap_soi = np.percentile(soi_output, settings["percentiles"][0], axis = 0)
+        high_base_soi = np.percentile(soi_output, settings["percentiles"][1], axis = 0)
+        analog_output = np.where(analog_output <= low_cap_an, -1, np.where(analog_output>=high_base_an, 1, 0))
+        soi_output = np.where(soi_output <= low_cap_soi, -1, np.where(soi_output>=high_base_soi, 1, 0))
 
     # Number of Processes for Pool (all but two)
     n_processes = os.cpu_count() - 2
@@ -192,7 +201,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                                                             analog_input,
                                                             analog_output,
                                                             mask, 1, gates = gates)
-                    if settings["median"]:
+                    if settings["median"] or settings["percentiles"]!=None:
                         net_err = np.array(run_complex_operations(metrics.super_classification_operation,
                                                                     soi_iterable_instance,
                                                                     pool,
@@ -295,7 +304,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                                                 analog_input,
                                                 analog_output,
                                                 sqrt_area_weights)
-        if settings["median"]:
+        if settings["median"] or settings["percentiles"]!=None:
             error_globalcorr[:, :] = run_complex_operations(metrics.super_classification_operation,
                                                             soi_iterable_instance,
                                                             pool,
@@ -337,7 +346,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                                                 analog_reg,
                                                 analog_output,
                                                 sqrt_area_weights)
-        if settings["median"]:
+        if settings["median"] or settings["percentiles"]!=None:
             error_corr[:, :] = run_complex_operations(metrics.super_classification_operation,
                                                             soi_iterable_instance,
                                                             pool,
@@ -371,7 +380,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
         with Pool(n_processes) as pool:
             cust_reg_map = np.zeros(np.shape(mask))
             cust_reg_map = build_data.extract_region(cust_reg_map, regions.get_region_dict(settings["correlation_region_name"]), lat=lat, lon=lon, mask_builder = 1)
-            if settings["median"] or settings["error_calc"]=="mse":
+            if settings["median"] or settings["error_calc"]=="mse"or settings["percentiles"]!=None:
                 soi_iterable_instance = soi_iterable(n_analogues,
                                                 soi_input,
                                                 soi_output,
@@ -385,7 +394,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                                                 analog_input,
                                                 analog_output,
                                                 cust_reg_map)
-            if settings["median"]:
+            if settings["median"] or settings["percentiles"]!=None:
                 cust_err = np.array(run_complex_operations(metrics.super_classification_operation,
                                                             soi_iterable_instance,
                                                             pool,
@@ -436,9 +445,8 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
     for idx_analog, n_analog in enumerate(n_analogues):
         i_analogue = rng.choice(np.arange(0, analog_output.shape[0]),
                                 size=(n_analog, soi_output.shape[0]), replace=True)
-        if settings["error_calc"] == "super_classify":
-            error_random[idx_analog, :] = metrics.get_analog_errors(soi_output,
-                                                    np.round(np.mean(analog_output[i_analogue], axis=0)), settings["error_calc"])
+        if settings["median"] or settings["percentiles"]!=None:
+            error_random[idx_analog, :] = np.mean((soi_output!=(scipy.stats.mode(analog_output[i_analogue], axis=0)).mode))
             
         elif settings["error_calc"] == "map":
             np.append(error_random,metrics.get_analog_errors(soi_output,
@@ -457,7 +465,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
 
     # -----------------------
     # Climatology
-    if settings['median']:
+    if settings['median'] or settings["percentiles"]!=None:
         error_climo = np.repeat(np.array([1]), len_analogues)
     elif settings["error_calc"] == "map":
         error_climo = metrics.get_analog_errors(soi_output, np.mean(analog_output, axis=0), settings["error_calc"])
@@ -486,7 +494,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                                                     analog_output[:,:,:,np.newaxis],
                                                     analog_output,
                                                     no_weights)
-            if settings["median"]:
+            if settings["median"] or settings["percentiles"]!=None:
                 error_maxskill[:, :] = run_complex_operations(metrics.super_classification_operation,
                                                                 soi_iterable_instance,
                                                                 pool,

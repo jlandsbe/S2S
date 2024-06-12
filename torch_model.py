@@ -417,8 +417,11 @@ class MaskTrainer(BaseTrainer):
             loss = weighted_losses.mean()
                 # Add L1 regularization
             l1_lambda = self.settings["mask_l1"]  # You can adjust this value
+            l2_inverse_lambda = self.settings["mask_l2_inverse"]
             l1_norm = torch.norm(self.model.map.weight, p=1)
+            l2_norm = torch.norm(self.model.map.weight, p=2)
             loss += l1_lambda * l1_norm
+            loss += l2_inverse_lambda / l2_norm
             loss.backward()
 
             # Adjust learning weights

@@ -9,6 +9,7 @@ import numpy as np
 import tensorflow as tf
 import build_data
 import tensorflow_probability as tfp
+import scipy.stats
 
 __author__ = "Jamin K. Rader, Elizabeth A. Barnes, and Randal J. Barnes"
 __version__ = "30 March 2023"
@@ -111,13 +112,13 @@ def super_classification_operation(inputs):
         input_diff = []
         output_spread = []
         for n_analogs in inputs["n_analogs"]:
-            results.append(get_analog_errors(inputs["soi_output_sample"], np.round(np.median(inputs["analog_output"][i_analogs[:n_analogs]], axis=0)), "mae"))
+            results.append(np.mean(inputs["soi_output_sample"]!=(scipy.stats.mode(inputs["analog_output"][i_analogs[:n_analogs]], axis=0)).mode))
             input_diff.append((np.mean((inputs["soi_input_sample"] - inputs["analog_input"][i_analogs[:n_analogs]])**2))**.5)
             output_spread.append(np.mean(np.var(inputs["analog_output"][i_analogs[:n_analogs]],axis=0)))
         return np.stack(results, axis=0), np.stack(input_diff, axis=0), np.stack(output_spread, axis=0)
     else:
         for n_analogs in inputs["n_analogs"]:
-            results.append(get_analog_errors(inputs["soi_output_sample"], np.round(np.mean(inputs["analog_output"][i_analogs[:n_analogs]], axis=0)), "mae"))
+            results.append(np.mean(inputs["soi_output_sample"]!=(scipy.stats.mode(inputs["analog_output"][i_analogs[:n_analogs]], axis=0)).mode))
         return np.stack(results, axis=0)
 
 #do we want this to be weighted?
