@@ -19,7 +19,7 @@ import scipy.stats
 warnings.filterwarnings(action='ignore', message='Mean of empty slice')
 warnings.filterwarnings(action='ignore', message='All-NaN slice encountered')
 warnings.filterwarnings("ignore", category=ShapelyDeprecationWarning)
-#np.warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning)
+warnings.filterwarnings("ignore", message="Failed to load image Python extension")
 
 __author__ = "Jacob Landsberg, Jamin K. Rader, Elizabeth A. Barnes, and Randal J. Barnes"
 __version__ = "6 May 2024"
@@ -209,9 +209,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                         error_network[:, :] = net_err[:,0,:]
                         analog_match_error = net_err[:,1,:] 
                         prediction_spread = net_err[:,2,:]
-                        # bins1 = np.percentile(analog_match_error, [0, 20, 40, 60, 80], axis = 0).T
-                        # bins2 = np.percentile(prediction_spread, [0, 20, 50, 60, 80], axis = 0).T
-                        # plots.uncertainty_whiskers(analogue_vector, error_network, analog_match_error, prediction_spread, settings, bins1 = bins1, bins2 = bins2)
+        
                     elif settings["error_calc"] == "classify":
                         error_network[:, :] = run_complex_operations(metrics.classification_operation,
                                                                     soi_iterable_instance,
@@ -231,12 +229,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                                                                     soi_iterable_instance,
                                                                     pool,
                                                                     chunksize=soi_input.shape[0]//n_processes,))
-                        error_network[:, :] = net_err[:,0,:]
-                        analog_match_error = net_err[:,1,:] 
-                        prediction_spread = net_err[:,2,:]
-                        bins1 = np.percentile(analog_match_error, [0, 20, 50, 70, 90], axis=0).T
-                        bins2 = np.percentile(prediction_spread, [0, 20, 50, 70, 90], axis=0).T
-                        plots.uncertainty_whiskers(analogue_vector, error_network, analog_match_error, prediction_spread, settings, bins1 = bins1, bins2 = bins2)
+
                     else:
                         net_err = np.array(run_complex_operations(metrics.mse_operation,
                                                                     soi_iterable_instance,
@@ -245,9 +238,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                         error_network[:, :] = net_err[:,0,:]
                         analog_match_error = net_err[:,1,:] 
                         prediction_spread = net_err[:,2,:]
-                        bins1 = np.percentile(analog_match_error, [0, 20, 40, 60, 80], axis = 0).T
-                        bins2 = np.percentile(prediction_spread, [0, 20, 50, 60, 80], axis = 0).T
-                        # plots.uncertainty_whiskers(analogue_vector, error_network, analog_match_error, prediction_spread, settings, bins1 = bins1, bins2 = bins2)
+
                     print("finished network error")
     # -----------------------
     # ANN-Analog
@@ -298,17 +289,29 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
     # Simple GLOBAL correlation baseline
     with Pool(n_processes) as pool:
         sqrt_area_weights = np.sqrt(np.cos(np.deg2rad(lat))[np.newaxis, :, np.newaxis, np.newaxis])
-        soi_iterable_instance = soi_iterable(n_analogues,
-                                                soi_input,
-                                                soi_output,
-                                                analog_input,
-                                                analog_output,
-                                                sqrt_area_weights)
+        if settings["median"] or settings["error_calc"]=="mse"or settings["percentiles"]!=None:
+            soi_iterable_instance = soi_iterable(n_analogues,
+                                            soi_input,
+                                            soi_output,
+                                            analog_input,
+                                            analog_output,
+                                            sqrt_area_weights, uncertainties=1)
+        else:
+            soi_iterable_instance = soi_iterable(n_analogues,
+                                            soi_input,
+                                            soi_output,
+                                            analog_input,
+                                            analog_output,
+                                            sqrt_area_weights)
         if settings["median"] or settings["percentiles"]!=None:
-            error_globalcorr[:, :] = run_complex_operations(metrics.super_classification_operation,
+            glob_err = np.array(run_complex_operations(metrics.super_classification_operation,
                                                             soi_iterable_instance,
                                                             pool,
-                                                            chunksize=soi_input.shape[0]//n_processes,)
+                                                            chunksize=soi_input.shape[0]//n_processes,))
+            error_globalcorr[:, :] = glob_err[:,0,:]
+            global_analog_match_error = glob_err[:,1,:] 
+            global_prediction_spread = glob_err[:,2,:]
+            
         elif settings["error_calc"] == "classify":
             error_globalcorr[:, :] = run_complex_operations(metrics.classification_operation,
                                                             soi_iterable_instance,
@@ -326,10 +329,13 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                                                             pool,
                                                             chunksize=soi_input.shape[0]//n_processes,)
         else:
-            error_globalcorr[:, :] = run_complex_operations(metrics.mse_operation,
+            glob_err = np.array(run_complex_operations(metrics.super_classification_operation,
                                                             soi_iterable_instance,
                                                             pool,
-                                                            chunksize=soi_input.shape[0]//n_processes,)
+                                                            chunksize=soi_input.shape[0]//n_processes,))
+            error_globalcorr[:, :] = glob_err[:,0,:]
+            global_analog_match_error = glob_err[:,1,:] 
+            global_prediction_spread = glob_err[:,2,:]
         print("finished global error")
     # -----------------------
     # Simple TARGET REGION correlation baseline
@@ -400,10 +406,8 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                                                             pool,
                                                             chunksize=soi_input.shape[0]//n_processes,))
                 error_customcorr[:, :] = cust_err[:,0,:]
-                baseline_analog_match_error = cust_err[:,1,:] 
-                baseline_prediction_spread = cust_err[:,2,:]
-                # plots.uncertainty_whiskers(analogue_vector, error_network, analog_match_error, prediction_spread, settings, 
-                #                            baseline_error = error_customcorr, baseline_analog_match = baseline_analog_match_error, baseline_spread = baseline_prediction_spread)
+                NH_analog_match_error = cust_err[:,1,:] 
+                NH_prediction_spread = cust_err[:,2,:]
             
             elif settings["error_calc"] == "classify":
                 error_customcorr[:, :] = run_complex_operations(metrics.classification_operation,
@@ -427,8 +431,8 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                                                             pool,
                                                             chunksize=soi_input.shape[0]//n_processes,))
                 error_customcorr[:, :] = cust_err[:,0,:]
-                baseline_analog_match_error = cust_err[:,1,:] 
-                baseline_prediction_spread = cust_err[:,2,:]
+                NH_analog_match_error = cust_err[:,1,:] 
+                NH_prediction_spread = cust_err[:,2,:]
     
     # -----------------------
     # Custom baseline (e.g. mean evolution)
@@ -460,8 +464,8 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                 random_output_spread[idx_analog,:] = (np.var(analog_output[i_analogue], axis=0))
     
     plots.uncertainty_whiskers(analogue_vector, error_network, analog_match_error, prediction_spread, settings, 
-                                        baseline_error = error_customcorr, baseline_analog_match = baseline_analog_match_error, 
-                                        baseline_spread = baseline_prediction_spread, random_error = np.array(error_random).T, random_spread = random_output_spread.T)
+                                        baseline_error = [error_customcorr, error_globalcorr], baseline_analog_match = [NH_analog_match_error, global_analog_match_error], 
+                                        baseline_spread = [NH_prediction_spread, global_prediction_spread], random_error = np.array(error_random).T, random_spread = random_output_spread.T)
 
     # -----------------------
     # Climatology

@@ -10,6 +10,20 @@ from numpy import inf
 import time
 import copy
 import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib as mpl
+import base_directories
+import cartopy as ct
+
+
+dir_settings = base_directories.get_directories()
+if dir_settings["data_directory"].split("/")[1] != "Users":
+    ct.config["data_dir"] = "/scratch/jlandsbe/cartopy_maps"
+mpl.rcParams["figure.facecolor"] = "white"
+mpl.rcParams["figure.dpi"] = 150
+plt.style.use("seaborn-v0_8")
+dpiFig = 300
+
 def prepare_device(device="gpu"):
     """
     setup GPU device if available. get gpu device indices which are used for DataParallel
@@ -283,7 +297,7 @@ class BaseTrainer:
             if self.early_stopper.check_early_stop(epoch, self.log.history["val_loss"][epoch], self.model):
                 print(
                     f"Restoring model weights from the end of the best epoch {self.early_stopper.best_epoch}: "
-                    f"val_loss = {self.early_stopper.min_validation_loss:.5f}"
+                    f"val_loss = {self.early_stopper.min_validation_loss:.5f}", flush=True
                 )
                 self.log.print(idx=self.early_stopper.best_epoch)
 
@@ -299,11 +313,26 @@ class BaseTrainer:
                 f"Epoch {epoch:3d}/{self.max_epochs:2d}\n"
                 f"  {elapsed_time:.1f}s"
                 f" - train_loss: {self.log.history['loss'][epoch]:.5f}"
-                f" - val_loss: {self.log.history['val_loss'][epoch]:.5f}"
+                f" - val_loss: {self.log.history['val_loss'][epoch]:.5f}", flush=True
             )
 
         # reset the batch_log
         self.batch_log.reset()
+
+    def plot_loss(self):
+        plt.figure(figsize=(10, 5))
+        plt.plot(self.log.history['loss'], label='Train Loss')
+        plt.plot(self.log.history['val_loss'], label='Validation Loss')
+        plt.title('Model loss')
+        plt.ylabel('Loss')
+        plt.xlabel('Epoch')
+        plt.legend(loc='upper right')
+        plt.tight_layout()
+        print(dir_settings["figure_diag_directory"] + self.settings["savename_prefix"] +
+                '_training_history.png')
+        plt.savefig(dir_settings["figure_diag_directory"] + self.settings["savename_prefix"] +
+                '_training_history.png', dpi=dpiFig, bbox_inches='tight')
+        plt.close()
 
     @abstractmethod
     def _train_epoch(self):
@@ -409,7 +438,7 @@ class MaskTrainer(BaseTrainer):
             target = target.view(-1, 1)
             losses = self.criterion(output, target)
             if self.settings["weighted_train"] > 0:
-                weights = self.settings["weighted_train"] / (target + 1e-8)
+                weights =  (1/(target + 1e-8))**self.settings["weighted_train"]
             else:
                 weights = torch.ones_like(target)
             #weights = weights/weights.mean()
@@ -461,7 +490,7 @@ class MaskTrainer(BaseTrainer):
                 target = target.view(-1, 1)
                 losses = self.criterion(output, target)
                 if self.settings["weighted_train"] > 0:
-                    weights = self.settings["weighted_train"] / (target + 1e-8)
+                    weights = (1/(target + 1e-8))**self.settings["weighted_train"]
                 else:
                     weights = torch.ones_like(target)
                 #weights = weights/weights.mean()

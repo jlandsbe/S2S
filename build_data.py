@@ -16,6 +16,7 @@ import os
 import warnings
 from datetime import timedelta
 import regionmask
+import gc
 
 __author__ = "Jamin K. Rader, Elizabeth A. Barnes, Randal J. Barnes, and Jacob Landsberg"
 __version__ = "June 2023"
@@ -180,8 +181,8 @@ def process_input_output(data_directory, settings, input_standard_dict=None,
     #if you are using 2 feature to predict, get the extra channel
     if settings["extra_channel"] != None:
         extra_channel = []
-        for chan_nam in settings["extra_channel"]:
-            extra_channel.append(get_netcdf(chan_nam, data_directory, settings, members=members, time_tendency=settings["time_tendency"], new = settings["new_detrend"]))
+        for chan_idx, chan_nam in enumerate(settings["extra_channel"]):
+            extra_channel.append(get_netcdf(chan_nam, data_directory, settings, members=members, time_tendency=settings["time_tendency"][chan_idx], new = settings["new_detrend"]))
     else:
         extra_channel = None
     #optionally set your data to random values for testing purposes
@@ -205,7 +206,7 @@ def process_input_output(data_directory, settings, input_standard_dict=None,
     (data_input, data_output, input_standard_dict, output_standard_dict) = process_data(data_feature, data_output, settings, input_standard_dict, output_standard_dict, extra_channel)
     persist_err = np.mean(compute_persistance(data_output, settings["lead_time"], settings["error_calc"]))
 
-
+    gc.collect()
     return data_input, data_output, input_standard_dict, output_standard_dict, persist_err
 
 def compute_persistance(output_array, leadtime, error_type = "mse"):
@@ -257,7 +258,7 @@ def process_data(data_feature, data_target, settings, input_standard_dict, outpu
         # but you could with a 7, 14, or 21 day lead. )
     else:
         #this is more of a check to make sure we have the same dates for input/output, should be ok to remove
-        data_input, data_target = xr.align(data_input, data_target, join="inner", exclude = ("lat","lon"), copy=True)
+        data_input, data_target = xr.align(data_input, data_target, join="inner", exclude = ("lat","lon"))
         t_avg = str(settings["averaged_days"]) + "D"
         #here we shift forward the data and then remove the 1st time step to effectively compute a backward downsample (e.g. Jan 1 - Jan 7 data will all go to Jan 1, not all to Jan 7)
         data_input = data_input.resample(time = t_avg).mean().shift(time=1)
@@ -269,7 +270,7 @@ def process_data(data_feature, data_target, settings, input_standard_dict, outpu
 
     #align our data, so all dates are lined up again before applying the lead time filter. This results in index i having data_input from lead time earlier than the data_output
     #this is used to filter out any years that don't have correspinding years in the input/output
-    data_input, data_output = xr.align(data_input, data_output, join="inner", exclude = ("lat","lon"), copy=True) 
+    data_input, data_output = xr.align(data_input, data_output, join="inner", exclude = ("lat","lon")) 
      #after this point, don't realign based on time or you'll get rid of lead time
     data_input, data_output = filter_lead_times(data_input, data_output, settings["lead_time"])
     #filter out any years/months that you don't care about seeing in the data 
@@ -319,8 +320,8 @@ def add_extra_channel(data_in, settings, extra_chan):
         return data_in.expand_dims(dim={"channel": 1}, axis=-1).copy()
     else:
         data_in = data_in.expand_dims(dim={"channel": 1}, axis=-1).copy()
-        for channel in extra_chan:
-            data_in = xr.concat([data_in, extra_chan], dim = "channel")
+        for idx,__ in enumerate(settings["extra_channel"]):
+            data_in = xr.concat([data_in, extra_chan[idx]], dim = "channel")
         # d_present, d_past = xr.align(data_in[:, settings["extra_channel"]:, :, :],
         #                              data_in[:, :-settings["extra_channel"], :, :], join="override", copy=True)
         # data_in = d_present.expand_dims(dim={"channel": 2}, axis=-1).copy()

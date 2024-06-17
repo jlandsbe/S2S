@@ -9,7 +9,7 @@ import numpy as np
 import tensorflow as tf
 import metrics
 import gc
-from keras.utils.generic_utils import get_custom_objects
+#from keras.utils.generic_utils import get_custom_objects
 import tensorflow_probability as tfp
 
 __author__ = "Jamin K. Rader, Elizabeth A. Barnes, and Randal J. Barnes"
@@ -123,7 +123,7 @@ def JBLsoftmax(x, axis=-1, training=False):
         output = tf.math.floor(tf.math.divide(xplus,mx))
     return output
 
-get_custom_objects().update({'JBLcustom': tf.keras.layers.Activation(JBLsoftmax)})
+#get_custom_objects().update({'JBLcustom': tf.keras.layers.Activation(JBLsoftmax)})
 
 def parse_model(x_input, mask_model, dissimilarity_model, prediction_model):
     weighted_soi, weighted_analog, weights, gates, branches = mask_model(x_input)

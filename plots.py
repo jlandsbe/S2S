@@ -262,10 +262,7 @@ def summarize_skill_score(metrics_dict, error_type):
         plt.plot(metrics_dict["analogue_vector"], 1-(np.repeat(np.array([x_plot]), len(metrics_dict["analogue_vector"]))), '.-', markersize=marker_size, label='climatology',
              color="black", alpha=alpha)
         
-    x_plot = metrics.eval_function(metrics_dict["error_network"])
-    x_plot = 1. - skill_score_helper(x_plot, x_climatology_baseline, error_type)
-    plt.plot(metrics_dict["analogue_vector"], x_plot, '.-', markersize=marker_size, label='masked analog',
-             color="orange", alpha=alpha)
+
     
     x_plot = metrics.eval_function(metrics_dict["error_maxskill"])
     x_plot = 1. - skill_score_helper(x_plot, x_climatology_baseline, error_type)
@@ -278,12 +275,10 @@ def summarize_skill_score(metrics_dict, error_type):
                 color="palevioletred", alpha=alpha)
     
     x_plot = metrics.eval_function(metrics_dict["error_corr"])
-
     x_plot = 1. - skill_score_helper(x_plot, x_climatology_baseline, error_type)
     plt.plot(metrics_dict["analogue_vector"], x_plot, '.-', markersize=marker_size, label='region corr.',
              color="lightskyblue", alpha=alpha)
     
-    #x_plot = metrics.eval_function(metrics_dict["error_persist"])
 
     x_plot = metrics_dict["error_persist"]
     x_plot = 1. - skill_score_helper(x_plot, x_climatology_baseline, error_type)
@@ -299,6 +294,11 @@ def summarize_skill_score(metrics_dict, error_type):
     x_plot = 1. - skill_score_helper(x_plot, x_climatology_baseline, error_type)
     plt.plot(metrics_dict["analogue_vector"], x_plot, '.-', markersize=marker_size, label='random',
              color="gray", alpha=alpha)
+    
+    x_plot = metrics.eval_function(metrics_dict["error_network"])
+    x_plot = 1. - skill_score_helper(x_plot, x_climatology_baseline, error_type)
+    plt.plot(metrics_dict["analogue_vector"], x_plot, '.-', markersize=marker_size, label='masked analog',
+             color="orange", alpha=alpha)
 
     plt.ylabel('skill score')
     plt.xlabel('number of analogues averaged')
@@ -899,171 +899,39 @@ def uncertainty_plots(analogue_vector, error_network, analog_match_error, predic
         '_' + "prediction_spread_weighted" + str(analogue_vector[i]) + '.png', dpi=dpiFig, bbox_inches='tight')
 
 
-def uncertainty_whiskers(analogue_vector, error_network, analog_match_error, prediction_spread, settings, baseline_error=None, baseline_analog_match=None,
-                          baseline_spread=None, random_error = None, random_spread = None,bins1=[0], bins2=[0]):
+def uncertainty_whiskers(analogue_vector, error_network, analog_match_error, prediction_spread, settings, baseline_error=[], baseline_analog_match=[],
+                          baseline_spread=[], random_error = None, random_spread = None,bins1=[0], bins2=[0]):
     plt.style.use("default")
     for analog_idx in range(len(analogue_vector)-1):
-        # # Plot the analog match error vs error in prediction
-        # bins_an = list(bins1[analog_idx+1])  # Create a copy of bins to add max value
-        # y_data = error_network[:, analog_idx+1]
-        # x_data = analog_match_error[:, analog_idx+1]
-        # bins_an.append(np.max(x_data)+.000001)
-        # filtered_data_list = []
-        # mins = np.zeros((len(bins_an) - 1))
-        # maxs = np.zeros((len(bins_an) - 1))
-        
-        # for i in range(len(bins_an) - 1):
-        #     bin_min = bins_an[i]
-        #     bin_max = bins_an[i + 1]
-        #     filtered_data = y_data[(x_data >= bin_min) & (x_data < bin_max)]
-        #     mins[i] = np.min(filtered_data)
-        #     maxs[i] = np.max(filtered_data)
-        #     filtered_data_list.append(filtered_data)
-        
-        # x_positions = (np.array(bins_an)[1:] + np.array(bins_an)[:-1]) / 2
-        # color_data = .5 * np.ones(len(x_positions))
-        
-        # norm = clr.Normalize(vmin=color_data.min(), vmax=color_data.max())
-        # color_data = norm(color_data)
-        
-        # fig, ax = plt.subplots(figsize=(12, 6))
-        # ax.set_facecolor('white')
-        # # Hide top and right spines
-        # ax.grid(False)
-        # ax.spines['top'].set_visible(False)
-        # ax.spines['right'].set_visible(False)
-
-        # if len(filtered_data_list) > 1:
-        #     widths = .5 * np.diff(bins_an)
-        # else:
-        #     widths = [.5]
-        # # Plot each box plot
-        # boxes = ax.boxplot(filtered_data_list, positions=x_positions, patch_artist=True, medianprops=dict(color="black"), widths=widths, labels=np.round(x_positions,1))
-        # delta = (np.max(maxs) - np.min(mins))/10
-        # tot_min = max(np.min(mins)-1.3*delta,0)
-        # plt.ylim(tot_min, np.max(maxs)+1.3*delta)
-        # ax.set_xlim(max([x_positions[0]-.6*widths[0],0]), x_positions[-1]+.502*widths[-1])  # Setting x-axis limits
-        # ax.set_ylim(tot_min, np.max(maxs)+1.3*delta)  # Setting y-axis limits
-        # ax.set_xticks(np.round(x_positions,1))
-        
-        #         # Set colors for the boxes based on color_data
-        # for i, box in enumerate(boxes['boxes']):
-        #     color_value = color_data[i]
-        #     box.set_facecolor(cm.Blues(color_value))  # Using colormap 'viridis' to map color_value to a color
-
-        # for i, data in enumerate(filtered_data_list):
-        #     ax.text(x_positions[i], maxs[i]+delta/1.3, f'{len(data)}', ha='center', va='top', color='black', weight = "bold",
-        #             path_effects=[pe.withStroke(linewidth=1, foreground="w")])
-        # # Plot the scatter plot
-        # plt.xlabel('Analog Match Error')
-        # plt.ylabel('RMSE Prediction Error')
-        # plt.title(f'Analog Match Error vs RMSE Prediction Error ({analogue_vector[analog_idx+1]} analogs)')
-        
-        # # Save the figure
-        # plt.savefig(dir_settings["figure_diag_directory"] + settings["savename_prefix"] +
-        #             '_' + "goodness_of_match_" + str(analogue_vector[analog_idx+1]) + '.png', dpi=dpiFig, bbox_inches='tight')
-
-        # plt.close(fig)
-        #     #plot the spread of the predictions vs the error in the network
-        
-
-        #bins_an = list(bins2[analog_idx+1])  # Create a copy of bins to add max value
         y_data = error_network[:, analog_idx+1]
         x_data = prediction_spread[:, analog_idx+1]
         z = analog_match_error[:, analog_idx+1]
-        baseline_exist = baseline_error is not None
-        if baseline_exist:
-            baseline_y_data = baseline_error[:, analog_idx+1]
-            baseline_x_data = baseline_spread[:, analog_idx+1]
-            baseline_z = baseline_analog_match[:, analog_idx+1]
-            baseline_x_sorted_indices = np.argsort(baseline_x_data)
-            baseline_y_sorted_by_x = baseline_y_data[baseline_x_sorted_indices]
-            baseline_z_sorted_indices = np.argsort(baseline_z)
-            baseline_y_sorted_by_z = baseline_y_data[baseline_z_sorted_indices]
-            baseline_y_means_x = []
-            baseline_y_means_z = []
+        if len(baseline_error)>0:
+            NH_y_data = baseline_error[0][:, analog_idx+1]
+            NH_x_data = baseline_spread[0][:, analog_idx+1]
+            NH_z = baseline_analog_match[0][:, analog_idx+1]
+            NH_x_sorted_indices = np.argsort(NH_x_data)
+            NH_y_sorted_by_x = NH_y_data[NH_x_sorted_indices]
+            NH_z_sorted_indices = np.argsort(NH_z)
+            NH_y_sorted_by_z = NH_y_data[NH_z_sorted_indices]
+            NH_y_means_x = []
+            NH_y_means_z = []
+            if len(baseline_error)>1:
+                global_y_data = baseline_error[1][:, analog_idx+1]
+                global_x_data = baseline_spread[1][:, analog_idx+1]
+                global_z = baseline_analog_match[1][:, analog_idx+1]
+                global_x_sorted_indices = np.argsort(global_x_data)
+                global_y_sorted_by_x = global_y_data[global_x_sorted_indices]
+                global_z_sorted_indices = np.argsort(global_z)
+                global_y_sorted_by_z = global_y_data[global_z_sorted_indices]
+                global_y_means_x = []
+                global_y_means_z = []
         if random_error is not None:
             baseline_y_data = random_error[:, analog_idx+1]
             baseline_x_data = random_spread[:, analog_idx+1]
             random_sorted_indices = np.argsort(baseline_x_data)
             random_sorted = baseline_y_data[random_sorted_indices]
             random_y_means_x = []
-        # z_low = np.round(np.min(z),2)
-        # z_high = np.round(np.max(z),2)
-        # z = (z - np.min(z))/(np.max(z)-np.min(z))
-        # bins_an.append(np.max(x_data)+.000001)
-        # filtered_data_list = []
-        # color_data = np.zeros(len(bins_an) - 1)
-        # mins = np.zeros((len(bins_an) - 1))
-        # maxs = np.zeros((len(bins_an) - 1))
-        # for i in range(len(bins_an) - 1):
-        #     bin_min = bins_an[i]
-        #     bin_max = bins_an[i + 1]
-        #     filtered_data = y_data[(x_data >= bin_min) & (x_data < bin_max)]
-        #     filtered_data_list.append(filtered_data)
-        #     filtered_colors = z[(x_data >= bin_min) & (x_data < bin_max)]
-        #     filtered_colors_mean = np.mean(filtered_colors)
-        #     mins[i] = np.min(filtered_data)
-        #     maxs[i] = np.max(filtered_data)
-        #     color_data[i] = filtered_colors_mean
-        
-        # x_positions = (np.array(bins_an)[1:] + np.array(bins_an)[:-1]) / 2
-        
-        # norm = clr.Normalize(vmin=color_data.min(), vmax=color_data.max())
-        # color_data = norm(color_data)
-        
-        # fig, ax = plt.subplots(figsize=(12, 6))
-        # # Hide top and right spines
-        # ax.spines['top'].set_visible(False)
-        # ax.spines['right'].set_visible(False)
-        # if len(filtered_data_list) > 1:
-        #     widths = .5 * np.diff(bins_an)
-        # else:
-        #     widths = [.5]
-        
-        # # Plot each box plot
-        
-        # boxes = ax.boxplot(filtered_data_list, positions=x_positions, patch_artist=True, medianprops=dict(color="black"), widths=widths, labels=np.round(x_positions,1))
-        # #boxes = ax.violinplot(filtered_data_list, positions=x_positions, widths=widths, showmeans=True)
-        # ax.set_xticks(np.round(x_positions,1))
-        
-        #         # Set colors for the boxes based on color_data
-        # for i, box in enumerate(boxes['boxes']):
-        #     color_value = color_data[i]
-        #     rgba_color = cm.PiYG_r(color_value)
-        #     box.set_facecolor((rgba_color[0], rgba_color[1], rgba_color[2], 1.0))  # Set alpha 
-            
-
-        # delta = (np.max(maxs) - np.min(mins))/10
-        # tot_min = max(np.min(mins)-1.3*delta,0)
-
-        # plt.ylim(tot_min, np.max(maxs)+1.3*delta)
-        # ax.set_xlim(max([x_positions[0]-.6*widths[0],0]), x_positions[-1]+.502*widths[-1])  # Setting x-axis limits
-        # ax.set_ylim(tot_min, np.max(maxs)+1.3*delta)  # Setting y-axis limits
-        # for i, data in enumerate(filtered_data_list):
-        #     ax.text(x_positions[i], maxs[i]+delta/1.3, f'{len(data)}', ha='center', va='top', color='black', weight="bold", 
-        #             path_effects=[pe.withStroke(linewidth=1, foreground="w")])
-        # # Add labels and title
-        # plt.xlabel('Variance of Predictions')
-        # plt.ylabel('RMSE Prediction Error')
-        # plt.title('Variance of Predictions vs Prediction Error (' + str(analogue_vector[analog_idx+1]) + " analogs)")
-
-        # # Display the plot
-        #     # Add colorbar
-        # cbar = plt.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cm.PiYG_r), ax=ax)
-        # vmin = cbar.vmin
-        # vmax = cbar.vmax
-        # cbar.set_ticks([vmin, vmax])  # Set the colorbar ticks
-        # cbar.set_ticklabels([z_low, z_high])  # Set the tick labels
-        # cbar.set_label('Analog Matching Error', rotation=270)
-        # #cbar.ax.set_yticklabels(['Good Analog Match', 'Poor Analog Match'])  
-        # # Add text annotations to colorbar
-        # # cbar.ax.text(0, 1.05, 'Low Analog Match Error', horizontalalignment='left', verticalalignment='center')
-        # # cbar.ax.text(1, 1.05, 'High Analog Match Error', horizontalalignment='right', verticalalignment='center')
-        # plt.savefig(dir_settings["figure_diag_directory"] + settings["savename_prefix"] +
-        # '_' + "prediction_spread_weighted" + str(analogue_vector[analog_idx+1]) + '.png', dpi=dpiFig, bbox_inches='tight')
-        # plt.close(fig)
-        # Sort x and y based on x values
         x_sorted_indices = np.argsort(x_data)
         y_sorted_by_x = y_data[x_sorted_indices]
         z_sorted_indices = np.argsort(z)
@@ -1085,29 +953,36 @@ def uncertainty_whiskers(analogue_vector, error_network, analog_match_error, pre
             y_means_x.append(np.mean(y_subset_x))
             y_subset_z = y_sorted_by_z[:cutoff_index]
             y_means_z.append(np.mean(y_subset_z))
-            if baseline_exist:
-                baseline_y_subset_x = baseline_y_sorted_by_x[:cutoff_index]
-                baseline_y_means_x.append(np.mean(baseline_y_subset_x))
-                baseline_y_subset_z = baseline_y_sorted_by_z[:cutoff_index]
-                baseline_y_means_z.append(np.mean(baseline_y_subset_z))
+            if len(baseline_error)>0:
+                NH_y_subset_x = NH_y_sorted_by_x[:cutoff_index]
+                NH_y_means_x.append(np.mean(NH_y_subset_x))
+                NH_y_subset_z = NH_y_sorted_by_z[:cutoff_index]
+                NH_y_means_z.append(np.mean(NH_y_subset_z))
+                if len(baseline_error)>1:
+                    global_y_subset_x = global_y_sorted_by_x[:cutoff_index]
+                    global_y_means_x.append(np.mean(global_y_subset_x))
+                    global_y_subset_z = global_y_sorted_by_z[:cutoff_index]
+                    global_y_means_z.append(np.mean(global_y_subset_z))
             if random_error is not None:
                 random_y_subset_x = random_sorted[:cutoff_index]
                 random_y_means_x.append(np.mean(random_y_subset_x))
             #y_subset_xz = y_sorted_by_xz[:cutoff_index]
             #y_means_xz.append(np.mean(y_subset_xz))
         fig, ax = plt.subplots(figsize=(12, 6))
-        plt.plot(percentages, y_means_z, linestyle='-', linewidth = 7, color='forestgreen', label='Analog Matching Error')
-        plt.plot(percentages, y_means_x, linestyle='-', linewidth = 7, color='cornflowerblue', label='Prediction Spread')
-        if baseline_exist:
-            plt.plot(percentages, baseline_y_means_z, linestyle='dashed', linewidth = 5, color='forestgreen', label='Baseline Analog Matching Error')
-            plt.plot(percentages, baseline_y_means_x, linestyle='dashed', linewidth = 5, color='cornflowerblue', label='Baseline Prediction Spread')
+        #plt.plot(percentages, y_means_z, linestyle='-', linewidth = 7, color='forestgreen', label='Analog Matching Error')
+        plt.plot(percentages, 100*(1-np.array(y_means_x)), linestyle='-', linewidth = 7, color='deepskyblue', label='Prediction Spread')
+        if len(baseline_error)>0:
+            #plt.plot(percentages, baseline_y_means_z, linestyle='dashed', linewidth = 5, color='forestgreen', label='NH Analog Matching Error')
+            plt.plot(percentages, 100*(1-np.array(NH_y_means_x)), linestyle='dashed', linewidth = 5, color='skyblue', label='NH Prediction Spread')
+            if len(baseline_error)>1:
+                plt.plot(percentages, 100*(1-np.array(global_y_means_x)), linestyle='dotted', linewidth = 5, color='lightskyblue', label='Global Prediction Spread')
         if random_error is not None:
-            plt.plot(percentages, random_y_means_x, linestyle='dotted', linewidth = 5, color='coral', label='Random Prediction Spread')
+            plt.plot(percentages, 100*(1-np.array(random_y_means_x)), linestyle='dotted', linewidth = 5, color='coral', label='Random Prediction Spread')
         #plt.plot(percentages, y_means_xz, linestyle='-', linewidth = 7, color='gold', label='Analog Match Error x Prediction Spread')
         # Increase the font size of the labels and title
         plt.xlabel('Percent Most Confident', fontsize=14)
-        plt.ylabel('Error in Prediction', fontsize=14)
-        plt.title('Discard Plot for Analog Matching Error and Prediction Spread (' + str(analogue_vector[analog_idx+1]) + " analogs)", fontsize=16)
+        plt.ylabel('Percent Accuracy', fontsize=14)
+        plt.title('Discard Plot for Prediction Spread (' + str(analogue_vector[analog_idx+1]) + " analogs)", fontsize=16)
         ax.legend()
 
         # Remove top and right spines

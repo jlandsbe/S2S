@@ -8,7 +8,7 @@ from pprint import pprint
 import tensorflow as tf
 import silence_tensorflow.auto
 import build_data
-import build_model
+#import build_model
 import experiments
 from save_load_model_run import save_model_run
 import train_model
@@ -25,6 +25,7 @@ import torchinfo
 from keras.utils.vis_utils import plot_model
 import matplotlib.pyplot as plt
 warnings.filterwarnings(action='ignore', message='Mean of empty slice')
+warnings.filterwarnings("ignore", message="Failed to load image Python extension")
 
 __author__ = "Jamin K. Rader, Elizabeth A. Barnes, and Randal J. Barnes"
 __version__ = "30 March 2023"
@@ -221,14 +222,14 @@ def train_experiments(
                 tf.random.set_seed(settings["rng_seed"])
                 print(settings["model_type"])
                 if settings["model_type"] == "ann_analog_model":
-                    model = build_model.build_ann_analog_model(
-                        settings, [soi_train_input, analog_input])
+                    # model = build_model.build_ann_analog_model(
+                    #     settings, [soi_train_input, analog_input])
+                    pass
                 elif settings["model_type"] == "ann_model":
-                    model = build_model.build_ann_model(
-                        settings, [analog_input])
+                    # model = build_model.build_ann_model(
+                    #     settings, [analog_input])
+                    pass
                 elif settings["model_type"] == "interp_model":
-
-                ###this is where I would create data, create new torch model
                     trainset = CustomDataset(analog_input, soi_train_input, analog_output, soi_train_output)
                     valset = CustomDataset(analog_input, soi_val_input, analog_output, soi_val_output)
                     train_loader = DataLoader(
@@ -271,6 +272,7 @@ def train_experiments(
 
                     model.to(device)
                     trainer.fit()
+                    trainer.plot_loss()
                 else:
                      raise NotImplementedError("no such model coded yet")
                 if settings["model_type"] == "interp_model":

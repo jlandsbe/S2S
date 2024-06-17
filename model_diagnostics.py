@@ -19,6 +19,7 @@ from scipy.stats import linregress
 warnings.filterwarnings(action='ignore', message='Mean of empty slice')
 warnings.filterwarnings(action='ignore', message='All-NaN slice encountered')
 warnings.filterwarnings("ignore", category=ShapelyDeprecationWarning)
+warnings.filterwarnings("ignore", message="Failed to load image Python extension")
 #np.warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning)
 
 __author__ = "Jamin K. Rader, Elizabeth A. Barnes, and Randal J. Barnes"
