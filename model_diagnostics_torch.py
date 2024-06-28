@@ -209,6 +209,8 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                         error_network[:, :] = net_err[:,0,:]
                         analog_match_error = net_err[:,1,:] 
                         prediction_spread = net_err[:,2,:]
+                        modal_fraction = net_err[:,3,:]
+                        entropy_spread = net_err[:,4,:]
         
                     elif settings["error_calc"] == "classify":
                         error_network[:, :] = run_complex_operations(metrics.classification_operation,
@@ -311,6 +313,8 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
             error_globalcorr[:, :] = glob_err[:,0,:]
             global_analog_match_error = glob_err[:,1,:] 
             global_prediction_spread = glob_err[:,2,:]
+            global_modal_fraction = glob_err[:,3,:]
+            global_entropy_spread = glob_err[:,4,:]
             
         elif settings["error_calc"] == "classify":
             error_globalcorr[:, :] = run_complex_operations(metrics.classification_operation,
@@ -329,10 +333,10 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                                                             pool,
                                                             chunksize=soi_input.shape[0]//n_processes,)
         else:
-            glob_err = np.array(run_complex_operations(metrics.super_classification_operation,
-                                                            soi_iterable_instance,
-                                                            pool,
-                                                            chunksize=soi_input.shape[0]//n_processes,))
+            glob_err = np.array(run_complex_operations(metrics.mse_operation,
+                                                                    soi_iterable_instance,
+                                                                    pool,
+                                                                    chunksize=soi_input.shape[0]//n_processes,))
             error_globalcorr[:, :] = glob_err[:,0,:]
             global_analog_match_error = glob_err[:,1,:] 
             global_prediction_spread = glob_err[:,2,:]
@@ -408,6 +412,8 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                 error_customcorr[:, :] = cust_err[:,0,:]
                 NH_analog_match_error = cust_err[:,1,:] 
                 NH_prediction_spread = cust_err[:,2,:]
+                NH_modal_fraction = cust_err[:,3,:]
+                NH_entropy_spread = cust_err[:,4,:]
             
             elif settings["error_calc"] == "classify":
                 error_customcorr[:, :] = run_complex_operations(metrics.classification_operation,
@@ -462,10 +468,25 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                 random_output_spread[idx_analog,:] = (np.mean(np.var(analog_output[i_analogue],axis=0), axis=(-1,-2)))
             else:
                 random_output_spread[idx_analog,:] = (np.var(analog_output[i_analogue], axis=0))
+    if settings["median"] or settings["percentiles"]!=None:
+        network_confidence_dict = {"Analog Match": analog_match_error, "Prediction Spread": prediction_spread, "Modal Fraction":modal_fraction,"Entropy":entropy_spread}
+        global_confidence_dict = {"Analog Match": global_analog_match_error, "Prediction Spread": global_prediction_spread, "Modal Fraction":global_modal_fraction,"Entropy":global_entropy_spread}
+        NH_cofidence_dict = {"Analog Match": NH_analog_match_error, "Prediction Spread": NH_prediction_spread, "Modal Fraction":NH_modal_fraction,"Entropy":NH_entropy_spread}
+        random_confidence_dict = {}
+    else:
+        network_confidence_dict = {"Analog Match": analog_match_error, "Prediction Spread": prediction_spread}
+        global_confidence_dict = {"Analog Match": global_analog_match_error, "Prediction Spread": global_prediction_spread}
+        NH_cofidence_dict = {"Analog Match": NH_analog_match_error, "Prediction Spread": NH_prediction_spread}
+        random_confidence_dict = {"Prediction Spread": random_output_spread.T}
     
-    plots.uncertainty_whiskers(analogue_vector, error_network, analog_match_error, prediction_spread, settings, 
-                                        baseline_error = [error_customcorr, error_globalcorr], baseline_analog_match = [NH_analog_match_error, global_analog_match_error], 
-                                        baseline_spread = [NH_prediction_spread, global_prediction_spread], random_error = np.array(error_random).T, random_spread = random_output_spread.T)
+    #drop global for now:
+    global_confidence_dict={}
+    error_conf_dict = {"Network":(error_network, network_confidence_dict, "solid","orangered"), "Global":(error_globalcorr, global_confidence_dict, "dashed", "palegreen"), "Northern Hemisphere":(error_customcorr, NH_cofidence_dict, "dotted", "cornflowerblue"), "Random":(np.array(error_random).T, random_confidence_dict, "dashdotdotted", "gold")}
+    plots.confidence_plot(analogue_vector, error_conf_dict, settings)
+
+    # plots.uncertainty_whiskers(analogue_vector, error_network, analog_match_error, prediction_spread, settings, 
+    #                                     baseline_error = [error_customcorr, error_globalcorr], baseline_analog_match = [NH_analog_match_error, global_analog_match_error], 
+    #                                     baseline_spread = [NH_prediction_spread, global_prediction_spread], random_error = np.array(error_random).T, random_spread = random_output_spread.T)
 
     # -----------------------
     # Climatology

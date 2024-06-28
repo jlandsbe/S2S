@@ -20,7 +20,7 @@ import matplotlib.pyplot as plt
 from shapely.ops import cascaded_union
 import palettable
 from matplotlib.colors import ListedColormap
-import matplotlib.colors as clr
+import matplotlib.colors as colors
 import metrics
 from shapely.errors import ShapelyDeprecationWarning
 import warnings
@@ -796,114 +796,12 @@ def plot_history(settings, history):
     plt.close()
 
 
-def uncertainty_plots(analogue_vector, error_network, analog_match_error, prediction_spread, settings):
-    for i in range(0,len(analogue_vector)):
-        #plot the analog match error vs error in prediction
 
-        x_data = error_network[:, i]
-        y_data = analog_match_error[:, i]
-
-        # Compute the line of best fit
-        slope, intercept = np.polyfit(x_data, y_data, 1)
-
-        # Compute the p-value for the slope
-        slope, intercept, r_value, p_value, std_err = linregress(x_data, y_data)
-
-        # Compute the 99% confidence interval for the slope
-        alpha = 0.01  # Significance level (1 - confidence level)
-        t_value = 2.626  # T-value for a two-tailed test with 48 degrees of freedom
-        confidence_interval = t_value * std_err
-
-        # Plot the scatter plot
-        plt.figure()
-        plt.scatter(x_data, y_data, alpha=0.5, label='Data Points')
-
-        # Plot the line of best fit
-        plt.plot(x_data, slope*x_data + intercept, color='red', label=f'Line of Best Fit (Slope={slope:.4f} \u00B1 {confidence_interval:.4f})')
-
-        # Add labels and title
-        plt.xlabel('RMSE Prediction Error')
-        plt.ylabel('Analog Match Error')
-        plt.title('Analog Match Error vs RMSE Prediction Error(' + str(analogue_vector[i]) + " analogs)")
-
-        # Display the plot
-        plt.legend()
-        plt.savefig(dir_settings["figure_diag_directory"] + settings["savename_prefix"] +
-        '_' + "goodness_of_match_" + str(analogue_vector[i]) + '.png', dpi=dpiFig, bbox_inches='tight')
-
-        #plot the spread of the predictions vs the error in the network
-
-        x_data = error_network[:, i]
-        y_data = prediction_spread[:, i]
-
-        # Compute the line of best fit
-        slope, intercept = np.polyfit(x_data, y_data, 1)
-
-        # Compute the p-value for the slope
-        slope, intercept, r_value, p_value, std_err = linregress(x_data, y_data)
-
-        # Compute the 99% confidence interval for the slope
-        alpha = 0.01  # Significance level (1 - confidence level)
-        t_value = 2.626  # T-value for a two-tailed test with 48 degrees of freedom
-        confidence_interval = t_value * std_err
-        plt.figure()
-        # Plot the scatter plot
-        plt.scatter(x_data, y_data, alpha=0.5, label='Data Points')
-
-        # Plot the line of best fit
-        plt.plot(x_data, slope*x_data + intercept, color='red', label=f'Line of Best Fit (Slope={slope:.4f} \u00B1 {confidence_interval:.4f})')
-
-        # Add labels and title
-        plt.xlabel('RMSE Prediction Error')
-        plt.ylabel('Variance of Predictions')
-        plt.title('Variance of Predictions vs RMSE Prediction Error(' + str(analogue_vector[i]) + " analogs)")
-
-        # Display the plot
-        plt.legend()
-        plt.savefig(dir_settings["figure_diag_directory"] + settings["savename_prefix"] +
-        '_' + "prediction_spread_" + str(analogue_vector[i]) + '.png', dpi=dpiFig, bbox_inches='tight')
-
-        #weighted plot of prediction spread vs network error
-
-
-        x_data = error_network[:, i]
-        y_data = prediction_spread[:, i]
-        z = analog_match_error[:, i]
-        z = (z -np.mean(z))/np.std(z)
-        z = (z - np.min(z)) / (np.max(z) - np.min(z))
-        # Compute the line of best fit
-        slope, intercept = np.polyfit(x_data, y_data, 1)
-
-        # Compute the p-value for the slope
-        slope, intercept, r_value, p_value, std_err = linregress(x_data, y_data)
-
-        # Compute the 99% confidence interval for the slope
-        alpha = 0.01  # Significance level (1 - confidence level)
-        t_value = 2.626  # T-value for a two-tailed test with 48 degrees of freedom
-        confidence_interval = t_value * std_err
-        plt.figure()
-        # Plot the scatter plot
-        plt.scatter(x_data, y_data, alpha=.5, label='Data Points', c = z, cmap = 'RdYlGn')
-
-        # Plot the line of best fit
-        plt.plot(x_data, slope*x_data + intercept, color='red', label=f'Line of Best Fit (Slope={slope:.4f} \u00B1 {confidence_interval:.4f})')
-
-        # Add labels and title
-        plt.xlabel('RMSE Prediction Error')
-        plt.ylabel('Variance of Predictions')
-        plt.title('Variance of Predictions vs Prediction Error - Color = Analog Match Error (' + str(analogue_vector[i]) + " analogs)")
-
-        # Display the plot
-        plt.legend()
-        plt.savefig(dir_settings["figure_diag_directory"] + settings["savename_prefix"] +
-        '_' + "prediction_spread_weighted" + str(analogue_vector[i]) + '.png', dpi=dpiFig, bbox_inches='tight')
-
-
-def uncertainty_whiskers(analogue_vector, error_network, analog_match_error, prediction_spread, settings, baseline_error=[], baseline_analog_match=[],
+def uncertainty_whiskers(analogue_vector, network_error, analog_match_error, prediction_spread, settings, baseline_error=[], baseline_analog_match=[],
                           baseline_spread=[], random_error = None, random_spread = None,bins1=[0], bins2=[0]):
     plt.style.use("default")
     for analog_idx in range(len(analogue_vector)-1):
-        y_data = error_network[:, analog_idx+1]
+        y_data = network_error[:, analog_idx+1]
         x_data = prediction_spread[:, analog_idx+1]
         z = analog_match_error[:, analog_idx+1]
         if len(baseline_error)>0:
@@ -969,7 +867,7 @@ def uncertainty_whiskers(analogue_vector, error_network, analog_match_error, pre
             #y_subset_xz = y_sorted_by_xz[:cutoff_index]
             #y_means_xz.append(np.mean(y_subset_xz))
         fig, ax = plt.subplots(figsize=(12, 6))
-        #plt.plot(percentages, y_means_z, linestyle='-', linewidth = 7, color='forestgreen', label='Analog Matching Error')
+        plt.plot(percentages, 100*(1-np.array(y_means_z)), linestyle='-', linewidth = 7, color='forestgreen', label='Analog Matching Error')
         plt.plot(percentages, 100*(1-np.array(y_means_x)), linestyle='-', linewidth = 7, color='deepskyblue', label='Prediction Spread')
         if len(baseline_error)>0:
             #plt.plot(percentages, baseline_y_means_z, linestyle='dashed', linewidth = 5, color='forestgreen', label='NH Analog Matching Error')
@@ -996,3 +894,46 @@ def uncertainty_whiskers(analogue_vector, error_network, analog_match_error, pre
         '_' + "discard_plot" + str(analogue_vector[analog_idx+1]) + '.png', dpi=dpiFig, bbox_inches='tight')
         plt.close(fig)
         # Show the plot
+
+
+def get_shades(base_color, num_shades):
+    base = np.array(colors.to_rgb(base_color))
+    return [colors.to_hex(base * (1 - i / num_shades)) for i in range(num_shades)]
+
+def confidence_plot(analogue_vector, error_dictionary, settings):
+    plt.style.use("default")
+    for analog_idx in range(1,len(analogue_vector)):
+        fig, ax = plt.subplots(figsize=(12, 6))
+        for mask_type_name, mask_type_values in error_dictionary.items():
+            error = mask_type_values[0]
+            confidence_dictionary = mask_type_values[1]
+            line_type = mask_type_values[2]
+            base_color = mask_type_values[3]
+            num_shades = len(confidence_dictionary)
+            shades = get_shades(base_color, num_shades)
+            for i, (confidence_name, confidence_values) in enumerate(confidence_dictionary.items()):
+                y_data = error[:, analog_idx]
+                x_data = confidence_values[:, analog_idx]
+                x_sorted_indices = np.argsort(x_data)
+                if confidence_name == "Entropy" or confidence_name == "Modal Fraction":
+                    x_sorted_indices = x_sorted_indices[::-1]
+                y_sorted_by_x = y_data[x_sorted_indices]
+                percentages = np.arange(100, 4, -1)
+                y_means_x = []
+                for p in percentages:
+                    cutoff_index = int(len(x_data) * (p / 100))
+                    y_subset_x = y_sorted_by_x[:cutoff_index]
+                    y_means_x.append(np.mean(y_subset_x))
+                label_name =  label_name = f"{mask_type_name}: {confidence_name} Confidence"
+                plt.plot(percentages, 100*(1-np.array(y_means_x)), linestyle=line_type, linewidth = 7, color=shades[i], label=label_name)
+        plt.xlabel('Percent Most Confident', fontsize=14)
+        plt.ylabel('Percent Accuracy', fontsize=14)
+        plt.title('Discard Plot for Prediction Spread (' + str(analogue_vector[analog_idx]) + " analogs)", fontsize=16)
+        ax.legend(loc="upper left")
+        ax = plt.gca()
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        plt.gca().invert_xaxis()
+        plt.savefig(dir_settings["figure_diag_directory"] + settings["savename_prefix"] +
+        '_' + "discard_plot" + str(analogue_vector[analog_idx]) + '.png', dpi=dpiFig, bbox_inches='tight')
+        plt.close(fig)

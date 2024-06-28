@@ -319,7 +319,7 @@ def add_extra_channel(data_in, settings, extra_chan):
     if settings["extra_channel"] == None or settings["extra_channel"] == 0:
         return data_in.expand_dims(dim={"channel": 1}, axis=-1).copy()
     else:
-        data_in = data_in.expand_dims(dim={"channel": 1}, axis=-1).copy()
+        data_in = data_in.expand_dims(dim={"channel": 1}, axis=-1)
         for idx,__ in enumerate(settings["extra_channel"]):
             data_in = xr.concat([data_in, extra_chan[idx]], dim = "channel")
         # d_present, d_past = xr.align(data_in[:, settings["extra_channel"]:, :, :],

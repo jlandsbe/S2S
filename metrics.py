@@ -111,15 +111,44 @@ def super_classification_operation(inputs):
     if inputs["uncertainties"]:
         input_diff = []
         output_spread = []
+        fraction_mode = []
+        entropy = []
         for n_analogs in inputs["n_analogs"]:
-            results.append(np.mean(inputs["soi_output_sample"]!=(scipy.stats.mode(inputs["analog_output"][i_analogs[:n_analogs]], axis=0)).mode))
+            results.append(np.mean(inputs["soi_output_sample"]!=(scipy.stats.mode(inputs["analog_output"][i_analogs[:n_analogs]], axis=0)).mode)) #fraction that were incorrect
             input_diff.append((np.mean((inputs["soi_input_sample"] - inputs["analog_input"][i_analogs[:n_analogs]])**2))**.5)
             output_spread.append(np.mean(np.var(inputs["analog_output"][i_analogs[:n_analogs]],axis=0)))
-        return np.stack(results, axis=0), np.stack(input_diff, axis=0), np.stack(output_spread, axis=0)
+            fraction_mode.append((scipy.stats.mode(inputs["analog_output"][i_analogs[:n_analogs]], axis=0)).count/len(i_analogs[:n_analogs])) #this will return the fraction of analogs that guessed the most common class. A high value implies high certainty, a low value implies low certainty. 
+            if len(np.shape(inputs["analog_output"][i_analogs[:n_analogs]]))==1:
+                entropy.append(entropy_calc_1D(inputs["analog_output"][i_analogs[:n_analogs]]))
+            else:
+                entropy.append(np.mean(entropy_calc_3D(inputs["analog_output"][i_analogs[:n_analogs]])))
+        return np.stack(results, axis=0), np.stack(input_diff, axis=0), np.stack(output_spread, axis=0), np.stack(fraction_mode, axis=0), np.stack(entropy, axis=0)
     else:
         for n_analogs in inputs["n_analogs"]:
             results.append(np.mean(inputs["soi_output_sample"]!=(scipy.stats.mode(inputs["analog_output"][i_analogs[:n_analogs]], axis=0)).mode))
         return np.stack(results, axis=0)
+
+def entropy_calc_1D(matrix, axis=0, base=None):
+  value,counts = np.unique(matrix, return_counts=True, axis=0)
+  return scipy.stats.entropy(counts, base=base, axis=0)
+
+def entropy_calc_3D(matrix, axis=0, base=None):
+    __, n, m = matrix.shape
+    
+    # Identify unique classes in the matrix
+    unique_classes = np.unique(matrix)
+    
+    # Initialize an array to hold the counts for each class
+    counts = np.zeros((len(unique_classes), n, m))
+    
+    # Count occurrences of each class
+    for i, cls in enumerate(unique_classes):
+        counts[i] = np.sum(matrix == cls, axis=0)
+    
+    # Compute entropy using scipy's entropy function on raw counts
+    entropy_matrix = scipy.stats.entropy(counts, base=base, axis=axis)
+    
+    return entropy_matrix
 
 #do we want this to be weighted?
 def mse(analog, truth):

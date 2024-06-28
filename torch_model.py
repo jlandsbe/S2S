@@ -40,20 +40,29 @@ def prepare_device(device="gpu"):
         raise NotImplementedError
 
 class CustomDataset(torch.utils.data.Dataset):
-    def __init__(self, soi_input, analog_input, soi_output, analog_output):
-        assert len(soi_input) == len(soi_output) and len(analog_input) == len(analog_output), "Lengths of arrays must be the same"
-        
+    def __init__(self, analog_input, soi_input, analog_output, soi_output, validation_soi_indices = None, validation_analog_indices = None, rng_seed=33):
+        #assert len(soi_input) == len(soi_output), "Lengths of SOI arrays must be the same"
+        #assert len(analog_input) == len(analog_output), "Lengths of analog arrays must be the same"
+        self.validation_soi_indices = validation_soi_indices
+        self.validation_analog_indices = validation_analog_indices
         self.soi_input = torch.tensor(soi_input, dtype=torch.float32)
         self.analog_input = torch.tensor(analog_input, dtype=torch.float32)
         self.soi_output = torch.tensor(soi_output, dtype=torch.float32)
         self.analog_output = torch.tensor(analog_output, dtype=torch.float32)
-        #self.mse = torch.tensor(np.mean((y1 - y2)**2, axis=1), dtype=torch.float32)  # Calculate MSE
+        torch.manual_seed(rng_seed)
         
     def __len__(self):
-        return min(len(self.soi_input),len(self.analog_input))
+        return max(len(self.soi_input),len(self.analog_input))
+        #return 10000
     
     def __getitem__(self, idx):
-        return self.soi_input[idx], self.analog_input[idx], torch.mean((self.soi_output[idx] - self.analog_output[idx])**2)
+        if self.validation_analog_indices is not None and self.validation_soi_indices is not None:
+            analog_idx = self.validation_analog_indices[idx]
+            soi_idx = self.validation_soi_indices[idx]
+        else:
+            analog_idx = int(torch.randint(0, len(self.analog_input), (1,)).item())
+            soi_idx = int(torch.randint(0, len(self.soi_input), (1,)).item())
+        return self.soi_input[soi_idx], self.analog_input[analog_idx], torch.mean((self.soi_output[soi_idx] - self.analog_output[analog_idx])**2)
     
 class TorchModel_base(nn.Module):
     def __init__(self, settings, input_dim1):
@@ -319,6 +328,11 @@ class BaseTrainer:
         # reset the batch_log
         self.batch_log.reset()
 
+    def normalize(self,values):
+        min_val = min(values)
+        max_val = max(values)
+        return [(x - min_val) / (max_val - min_val) for x in values]
+    
     def plot_loss(self):
         plt.figure(figsize=(10, 5))
         plt.plot(self.log.history['loss'], label='Train Loss')
@@ -422,6 +436,8 @@ class MaskTrainer(BaseTrainer):
         self.batch_log.reset()
 
         for batch_idx, (soi, analog, target) in enumerate(self.data_loader):
+            if batch_idx >= int(self.settings["max_iterations"]/self.settings["batch_size"])-1:
+                break
             soi_input, analog_input, target = (
                 soi.to(self.device),
                 analog.to(self.device),
@@ -437,10 +453,7 @@ class MaskTrainer(BaseTrainer):
             # Compute the loss and its gradients
             target = target.view(-1, 1)
             losses = self.criterion(output, target)
-            if self.settings["weighted_train"] > 0:
-                weights =  (1/(target + 1e-8))**self.settings["weighted_train"]
-            else:
-                weights = torch.ones_like(target)
+            weights =  ((1/(target + 1e-8))**self.settings["weighted_train"])/(100*10**self.settings["weighted_train"])
             #weights = weights/weights.mean()
             weighted_losses = losses * weights
             loss = weighted_losses.mean()
@@ -475,8 +488,9 @@ class MaskTrainer(BaseTrainer):
         """
         self.model.eval()
         with torch.no_grad():
-
             for batch_idx, (soi, analog, target) in enumerate(self.validation_data_loader):
+                if batch_idx >= int(self.settings["max_iterations"]/self.settings["val_batch_size"])-1:
+                    break
                 soi_input, analog_input, target = (
                 soi.to(self.device),
                 analog.to(self.device),
@@ -490,7 +504,7 @@ class MaskTrainer(BaseTrainer):
                 target = target.view(-1, 1)
                 losses = self.criterion(output, target)
                 if self.settings["weighted_train"] > 0:
-                    weights = (1/(target + 1e-8))**self.settings["weighted_train"]
+                    weights = ((1/(target + 1e-8))**self.settings["weighted_train"])/(50*10**self.settings["weighted_train"])
                 else:
                     weights = torch.ones_like(target)
                 #weights = weights/weights.mean()

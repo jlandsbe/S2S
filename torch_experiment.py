@@ -180,6 +180,8 @@ def train_experiments(
             lon,
             persist_err,
         ) = build_data.build_data(settings, data_directory)
+        if settings["preprocess"]:
+            exit()
         if settings["total_synthetic"]:
             analog_input = make_mjo_syn(settings, 1, 2500)
             analog_output = make_mjo_syn(settings, 0, 2500)
@@ -205,10 +207,6 @@ def train_experiments(
                 print('--- RUNNING ' + savename_prefix + '---')
 
                 # Check if the model metrics exist and overwrite is off.
-                metric_savename = dir_settings["metrics_directory"]+settings["savename_prefix"]+'_subset_metrics.pickle'
-                if os.path.exists(metric_savename) and overwrite_model is False:
-                    print(f"   saved {settings['savename_prefix']} metrics already exist. Skipping...")
-                    continue
                 if settings["gif"]:
                     output_plot = analog_input*np.nan
                     insert_row = (analog_input.shape[1] - analog_output.shape[1]) // 2
@@ -229,19 +227,19 @@ def train_experiments(
                     # model = build_model.build_ann_model(
                     #     settings, [analog_input])
                     pass
-                elif settings["model_type"] == "interp_model":
+                elif settings["model_type"] == "interp_model" and not settings["presaved_mask"]:
                     trainset = CustomDataset(analog_input, soi_train_input, analog_output, soi_train_output)
-                    valset = CustomDataset(analog_input, soi_val_input, analog_output, soi_val_output)
+                    valset = CustomDataset(analog_input, soi_val_input, analog_output, soi_val_output, np.random.randint(0, len(soi_val_input), size=min(settings["max_iterations"], len(analog_input))), np.random.randint(0, len(analog_input), size=min(settings["max_iterations"], len(analog_input))))
                     train_loader = DataLoader(
                     trainset,
                     batch_size=settings["batch_size"],
-                    shuffle=True,
+                    shuffle=False,
                     drop_last=False,
                 )
                     val_loader = DataLoader(
                     valset,
                     batch_size=settings["val_batch_size"],
-                    shuffle=True,
+                    shuffle=False,
                     drop_last=False,
 )
                     model = TorchModel_base(settings, np.shape(soi_train_input)[1:])
@@ -273,6 +271,12 @@ def train_experiments(
                     model.to(device)
                     trainer.fit()
                     trainer.plot_loss()
+                    model_savename = dir_settings["model_directory"] + savename_prefix + "_torch_model"
+                    torch.save(model.state_dict(),model_savename)
+                elif settings["presaved_mask"]:
+                        model = TorchModel_base(settings, np.shape(soi_train_input)[1:])
+                        model_savename = dir_settings["model_directory"] + savename_prefix + "_torch_model"
+                        model.load_state_dict(torch.load(model_savename))
                 else:
                      raise NotImplementedError("no such model coded yet")
                 if settings["model_type"] == "interp_model":
@@ -316,28 +320,30 @@ def train_experiments(
                             plt.title("Gate Distribution: 0 = NA, 1 = NP")
                             plt.savefig(dir_settings["figure_directory"] + settings["savename_prefix"] +
                     '_gate_distribution.png', dpi=300, bbox_inches='tight')
+                    
                         model_diagnostics_torch.visualize_interp_model(settings, weights_val, lat, lon)
                 else:
                     weights_val = None
 
 
-
+                if settings["mask_only"]:
+                    exit()
                 # PLOT MODEL EVALUATION METRICS
                 if settings["gates"]:
-                    metrics_dict = model_diagnostics_torch.visualize_metrics(settings, model, soi_test_input, soi_test_output,
+                    metrics_dict = model_diagnostics_torch.visualize_metrics(settings, model, soi_test_input[0:int(settings["percent_soi"]* len(soi_test_input))], soi_test_output[0:int(settings["percent_soi"]* len(soi_test_output))],
                                                                     analog_input, analog_output, lat,
                                                                     lon, weights_val, persist_err,
-                                                                    n_testing_analogs=analog_input.shape[0],
+                                                                    n_testing_analogs=int(analog_input.shape[0]*settings["percent_analog"]),
                                                                     analogue_vector = settings["analogue_vec"],
-                                                                    soi_train_output = soi_train_output,
+                                                                    soi_train_output = None,
                                                                     fig_savename="subset_skill_score_vs_nanalogues", gates=gates)
                 else:
-                    metrics_dict = model_diagnostics_torch.visualize_metrics(settings, model, soi_test_input, soi_test_output,
+                    metrics_dict = model_diagnostics_torch.visualize_metrics(settings, model, soi_test_input[0:int(settings["percent_soi"]* len(soi_test_input))], soi_test_output[0:int(settings["percent_soi"]* len(soi_test_output))],
                                                                     analog_input, analog_output, lat,
                                                                     lon, weights_val, persist_err,
-                                                                    n_testing_analogs=analog_input.shape[0],
+                                                                    n_testing_analogs=int(analog_input.shape[0]*settings["percent_analog"]),
                                                                     analogue_vector = settings["analogue_vec"],
-                                                                    soi_train_output = soi_train_output,
+                                                                    soi_train_output = None,
                                                                     fig_savename="subset_skill_score_vs_nanalogues")
 
                 # SAVE THE METRICS
