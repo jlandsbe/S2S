@@ -924,8 +924,8 @@ def confidence_plot(analogue_vector, error_dictionary, settings):
                     cutoff_index = int(len(x_data) * (p / 100))
                     y_subset_x = y_sorted_by_x[:cutoff_index]
                     y_means_x.append(np.mean(y_subset_x))
-                label_name =  label_name = f"{mask_type_name}: {confidence_name} Confidence"
-                plt.plot(percentages, 100*(1-np.array(y_means_x)), linestyle=line_type, linewidth = 7, color=shades[i], label=label_name)
+                label_name =  label_name = f"{mask_type_name}: {confidence_name}"
+                plt.plot(percentages, 100*(1-np.array(y_means_x)), linestyle=line_type, linewidth = 4, color=shades[i], label=label_name, alpha = .8)
         plt.xlabel('Percent Most Confident', fontsize=14)
         plt.ylabel('Percent Accuracy', fontsize=14)
         plt.title('Discard Plot for Prediction Spread (' + str(analogue_vector[analog_idx]) + " analogs)", fontsize=16)
@@ -937,3 +937,84 @@ def confidence_plot(analogue_vector, error_dictionary, settings):
         plt.savefig(dir_settings["figure_diag_directory"] + settings["savename_prefix"] +
         '_' + "discard_plot" + str(analogue_vector[analog_idx]) + '.png', dpi=dpiFig, bbox_inches='tight')
         plt.close(fig)
+
+def yearly_analysis(soi_year_repeated,best_analog_years,year_length, settings):
+    # Compute the 2D histogram
+    hist, xedges, yedges = np.histogram2d(soi_year_repeated, best_analog_years, bins=[int(year_length/5), int(year_length/5)])
+    
+    # Normalize the histogram along each row
+    row_sums = hist.sum(axis=1)
+    # Avoid division by zero by replacing 0s in row_sums with 1
+    row_sums[row_sums == 0] = 1
+    row_normalized_hist = hist / row_sums[:, np.newaxis]
+
+    # Normalize the histogram along each column
+    column_sums = row_normalized_hist.sum(axis=0)
+    # Avoid division by zero by replacing 0s in column_sums with 1
+    column_sums[column_sums == 0] = 1
+    normalized_hist = row_normalized_hist / column_sums[np.newaxis, :]
+    
+    # Plot the normalized 2D histogram
+    fig, ax = plt.subplots(figsize=(12, 6))
+    cax = ax.imshow(normalized_hist.T, origin='lower', cmap='Reds', aspect='auto', extent=[0, year_length, 0, year_length])
+    
+    # Add colorbar
+    cbar = fig.colorbar(cax, ax=ax, label='Normalized Counts')
+    
+    # Set labels and title
+    ax.set_xlabel('SOI Years')
+    ax.set_ylabel('Best Analog Years')
+    ax.set_title('SOI vs Best Analog Years')
+    
+    # Save the figure
+    print(dir_settings["figure_diag_directory"] + settings["savename_prefix"] + '_' + "yearly_analysis" + '.png')
+    fig.savefig(dir_settings["figure_diag_directory"] + settings["savename_prefix"] + '_' + "yearly_analysis" + '.png', dpi=dpiFig, bbox_inches='tight')
+    plt.close(fig)
+
+
+def monthly_analysis(soi_months_repeated,best_analog_months, settings):
+    fig, ax = plt.subplots(figsize=(12, 6))
+# Define the desired order of months dynamically
+    unique_months = np.unique(np.concatenate([soi_months_repeated, best_analog_months]))
+    sorted_months = np.sort(unique_months)
+    gaps = np.diff(np.append(sorted_months, sorted_months[0] + 12))  # consider wrap-around gap
+    largest_gap_index = np.argmax(gaps)
+    start_month_index = (largest_gap_index + 1) % len(sorted_months)
+    ordered_months = np.roll(sorted_months, -start_month_index)
+    month_mapping = {month: i for i, month in enumerate(ordered_months)}
+
+    # Remap the months based on the new order
+    soi_months_mapped = np.array([month_mapping[month] for month in soi_months_repeated])
+    best_analog_mapped = np.array([month_mapping[month] for month in best_analog_months])
+
+    # Compute the 2D histogram
+    hist, xedges, yedges = np.histogram2d(soi_months_mapped, best_analog_mapped, bins=[len(ordered_months), len(ordered_months)])
+
+    # Normalize the histogram along each row
+    row_sums = hist.sum(axis=1)
+    # Avoid division by zero by replacing 0s in row_sums with 1
+    row_sums[row_sums == 0] = 1
+    row_normalized_hist = hist / row_sums[:, np.newaxis]
+
+    # Normalize the histogram along each column
+    column_sums = row_normalized_hist.sum(axis=0)
+    # Avoid division by zero by replacing 0s in column_sums with 1
+    column_sums[column_sums == 0] = 1
+    normalized_hist = row_normalized_hist / column_sums[np.newaxis, :]
+
+    # Plot the normalized 2D histogram
+    plt.imshow(normalized_hist.T, origin='lower', cmap='Reds', aspect='auto', extent=[0, len(ordered_months), 0, len(ordered_months)])
+    plt.colorbar(label='Normalized Counts')
+
+    # Setting custom ticks
+    plt.xticks(ticks=np.arange(len(ordered_months)) + 0.5, labels=ordered_months)
+    plt.yticks(ticks=np.arange(len(ordered_months)) + 0.5, labels=ordered_months)
+
+    plt.xlabel('SOI Months')
+    plt.ylabel('Best Analog Months')
+    plt.title('2D Histogram with Column-Normalized Counts')
+    print(dir_settings["figure_diag_directory"] + settings["savename_prefix"] +
+    '_' + "monthly_analysis" + '.png')
+    plt.savefig(dir_settings["figure_diag_directory"] + settings["savename_prefix"] +
+    '_' + "monthly_analysis" + '.png', dpi=dpiFig, bbox_inches='tight')
+    plt.close(fig)

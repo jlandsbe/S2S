@@ -29,8 +29,8 @@ dpiFig = 300
 
 
 def visualize_metrics(settings, model, soi_input, soi_output, analog_input, analog_output, 
-                      lat, lon, mask, persist_err=0, n_testing_analogs=1_000,
-                      analogue_vector=None, fig_savename="",
+                      lat, lon, mask, persist_err=0, n_testing_analogs=1_000, n_testing_soi=1_000,
+                      analogue_vector=None, fig_savename="", analog_dates = None, soi_dates = None,
                       soi_train_output=None, my_masks = None, gates = None):
     if analogue_vector is None:
         analogue_vector = [1, 2, 5, 10, 15, 20, 25, 30]
@@ -41,18 +41,23 @@ def visualize_metrics(settings, model, soi_input, soi_output, analog_input, anal
     n_testing_analogs = np.min([analog_input.shape[0], n_testing_analogs])
     # get random analogs
     i_analog = rng_eval.choice(np.arange(0, analog_input.shape[0]), n_testing_analogs, replace=False)
+    i_soi = rng_eval.choice(np.arange(0, soi_input.shape[0]), n_testing_soi, replace=False)
+    if type(analog_dates) != type(None):
+        analog_dates = analog_dates[i_analog]
+    if type(soi_dates) != type(None):
+        soi_dates = soi_dates[i_soi]
 
     # assess model performance and compare to baselines
     metrics_dict = assess_metrics(settings, model,
-                                  soi_input[:, :, :, :],
-                                  soi_output[:],
+                                  soi_input[i_soi, :, :, :],
+                                  soi_output[i_soi],
                                   analog_input[i_analog, :, :, :],
                                   analog_output[i_analog],
                                   lat, lon,
                                   mask, persist_err,
                                   soi_train_output=soi_train_output,
                                   analogue_vector=analogue_vector,
-                                  fig_savename=fig_savename, my_masks = my_masks, gates = gates)
+                                  fig_savename=fig_savename, my_masks = my_masks, gates = gates, analog_dates = analog_dates, soi_dates = soi_dates)
 
     return metrics_dict
 
@@ -79,6 +84,28 @@ def soi_iterable(n_analogs, soi_input, soi_output, analog_input, analog_output, 
                   }
         yield inputs
 
+def soi_iterable_dates(n_analogs, soi_input, soi_output, analog_input, analog_output, mask, analog_dates_months, soi_dates_months, analog_dates_years, soi_dates_years, uncertainties = 0, gates = None):
+    """
+    Create an iterable for a parallel approach to metric assessment
+    """
+    for i_soi in range(soi_input.shape[0]):
+        if gates != None:
+            mask = gates[i_soi]
+        inputs = {"n_analogs": n_analogs,
+                  "max_analogs": np.max(n_analogs),
+                  "analog_input": analog_input,
+                  "analog_output": analog_output,
+                  "soi_input_sample": soi_input[i_soi, :, :, :],
+                  "soi_output_sample": soi_output[i_soi],
+                  "mask": mask,
+                  "analog_months": analog_dates_months,
+                  "soi_months": soi_dates_months,
+                  "analog_years": analog_dates_years,
+                  "soi_years": soi_dates_years,
+                  "uncertainties": uncertainties,
+                  }
+        yield inputs
+
 def soi_iterable_masks(n_analogs, soi_input, soi_output, analog_input, analog_output, masks):
     """
     Create an iterable for a parallel approach to metric assessment
@@ -100,7 +127,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                    mask, persist_err=0,
                    soi_train_output=None,
                    analogue_vector=[1, 2, 5, 10, 15, 20, 25, 30],
-                   show_figure=False, save_figure=True, fig_savename="", my_masks=None, gates = None):
+                   show_figure=False, save_figure=True, fig_savename="", my_masks=None, gates = None, analog_dates = None, soi_dates = None):
     
     if settings["median"]:
         soi_output = 1.0*(soi_output > 0)
@@ -195,7 +222,35 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                 # #error_network = np.swapaxes(error_network,0,1)
             else:
                 with Pool(n_processes) as pool:
-                    soi_iterable_instance = soi_iterable(n_analogues,
+                    
+                    if type(analog_dates) !=type(None):
+                            analog_months = np.array([date.month for date in analog_dates])
+                            analog_years = np.array([date.year for date in analog_dates])
+                            soi_months = np.array([date.month for date in soi_dates])
+                            soi_years = np.array([date.year for date in soi_dates])
+                            soi_iterable_instance = soi_iterable_dates(n_analogues,
+                                                            soi_input,
+                                                            soi_output,
+                                                            analog_input,
+                                                            analog_output,
+                                                            mask, analog_months, soi_months, analog_years, soi_years)
+                            date_info = np.squeeze(np.array(run_complex_operations(metrics.date_operation,
+                                                                    soi_iterable_instance,
+                                                                    pool,
+                                                                    chunksize=soi_input.shape[0]//n_processes,)))
+                            month_info = date_info[:,0,:]
+                            year_info = date_info[:,1,:]
+                            #Date info plotting
+                            year_length = max(analog_years) - min(analog_years)
+                            soi_months_repeated =  np.repeat(soi_months,month_info.shape[1])
+                            best_analog_months = month_info.flatten()
+                            soi_year_repeated =  np.repeat((soi_years),year_info.shape[1])
+                            best_analog_years= year_info.flatten()
+                            plots.yearly_analysis(soi_year_repeated, best_analog_years, year_length, settings)
+                            plots.monthly_analysis(soi_months_repeated, best_analog_months, settings)
+                            exit()
+                    else: 
+                        soi_iterable_instance = soi_iterable(n_analogues,
                                                             soi_input,
                                                             soi_output,
                                                             analog_input,
@@ -481,7 +536,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
     
     #drop global for now:
     global_confidence_dict={}
-    error_conf_dict = {"Network":(error_network, network_confidence_dict, "solid","orangered"), "Global":(error_globalcorr, global_confidence_dict, "dashed", "palegreen"), "Northern Hemisphere":(error_customcorr, NH_cofidence_dict, "dotted", "cornflowerblue"), "Random":(np.array(error_random).T, random_confidence_dict, "dashdotdotted", "gold")}
+    error_conf_dict = {"Network":(error_network, network_confidence_dict, "solid","red"), "Global":(error_globalcorr, global_confidence_dict, "densely dotted", "palegreen"), "Northern Hemisphere":(error_customcorr, NH_cofidence_dict, "dashed", "cornflowerblue"), "Random":(np.array(error_random).T, random_confidence_dict, "dashdot", "gold")}
     plots.confidence_plot(analogue_vector, error_conf_dict, settings)
 
     # plots.uncertainty_whiskers(analogue_vector, error_network, analog_match_error, prediction_spread, settings, 

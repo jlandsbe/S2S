@@ -35,9 +35,13 @@ def build_data(settings, data_directory):
     if settings["presaved_data_filename"] is None:
         data_savename = dir_settings["data_directory"] + 'presaved_data_' + data_exp_name + '.pickle'
         persist_savename = dir_settings["data_directory"] + data_exp_name + '_persist_error' + '.pickle'
+        analog_dates_savename = dir_settings["data_directory"] + data_exp_name + '_analog_dates' + '.pickle'
+        soi_dates_savename = dir_settings["data_directory"] + data_exp_name + '_soi_dates' + '.pickle'
     else:
         data_savename = dir_settings["data_directory"]+settings["presaved_data_filename"]
         persist_savename = dir_settings["data_directory"]+settings["presaved_data_filename"] + '_persist_error.pickle'
+        analog_dates_savename = dir_settings["data_directory"]+settings["presaved_data_filename"] + '_analog_dates.pickle'
+        soi_dates_savename = dir_settings["data_directory"]+settings["presaved_data_filename"] + '_soi_dates.pickle'
     persist_err=1 #setting to 1, could save and load this actual value if necessary
 
 #if 
@@ -66,6 +70,10 @@ def build_data(settings, data_directory):
             year_0 = settings["years"]
             midpoint = year_0[0]+((year_0[1]-year_0[0])/2)
             settings["years"] = (year_0[0], midpoint)
+        if settings["date_info"]:
+            analog_dates = np.tile(analog_input['time'].values,len(settings["analog_members"]))#saving dates of analog inputs
+        else: 
+            analog_dates = None
 
         print('getting soi training data...')
         #get the data for the SOIs to train on 
@@ -89,7 +97,10 @@ def build_data(settings, data_directory):
             data_directory, settings, members=settings["soi_test_members"], input_standard_dict=input_standard_dict,
             output_standard_dict=output_standard_dict,
         )
-
+        if settings["date_info"]:
+            soi_dates = np.tile(soi_test_input['time'].values,len(settings["analog_members"])) #saving dates of analog inputs
+        else:
+            soi_dates = None
         #here we are stacking the data to reduce the dimensions from time and member number to just sample number (we aren't concerned with differentiating those)
         #the output will either be a single number per sample if targ_scalar is specified to predict the average over the region, otherwise it will keep lat x lon
         analog_input, analog_output = stack_to_samples(analog_input, analog_output, settings["targ_scalar"])
@@ -127,6 +138,11 @@ def build_data(settings, data_directory):
             pickle.dump(area_weights.astype(np.float32), fp)
         with open(persist_savename, 'wb') as f:
             pickle.dump(persist_err, f)
+        if settings["date_info"]:
+            with open(analog_dates_savename, 'wb') as f:
+                pickle.dump(analog_dates, f)
+            with open(soi_dates_savename, 'wb') as f:
+                pickle.dump(soi_dates, f)
 
     print(f"loading the pre-saved training/validation/testing data.")
     print(f"   {data_savename}")
@@ -152,6 +168,14 @@ def build_data(settings, data_directory):
         area_weights = pickle.load(fp)
     with open(persist_savename, 'rb') as f:
         persist_err = pickle.load(f)
+    if not settings["date_info"]:
+        analog_dates = None
+        soi_dates = None   
+    else: 
+        with open(analog_dates_savename, 'rb') as f:
+            analog_dates = pickle.load(f)
+        with open(soi_dates_savename, 'rb') as f:
+            soi_dates = pickle.load(f)
 
     # summarize the data
     analog_text = ("   analog data\n"
@@ -168,7 +192,7 @@ def build_data(settings, data_directory):
                  )
     print(analog_text + train_text + val_text + test_text)
     return (analog_input, analog_output, soi_train_input, soi_train_output, soi_val_input, soi_val_output,
-            soi_test_input, soi_test_output, input_standard_dict, output_standard_dict, lat, lon, persist_err)
+            soi_test_input, soi_test_output, input_standard_dict, output_standard_dict, lat, lon, persist_err, analog_dates, soi_dates)
 
 
 

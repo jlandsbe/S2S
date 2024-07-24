@@ -179,6 +179,8 @@ def train_experiments(
             lat,
             lon,
             persist_err,
+            analog_dates,
+            soi_dates
         ) = build_data.build_data(settings, data_directory)
         if settings["preprocess"]:
             exit()
@@ -283,7 +285,12 @@ def train_experiments(
                         map_layer = getattr(model, "bias_only")
                         biases = map_layer.data
                         weights_val = biases.numpy().reshape(np.shape(analog_input)[1:])
-
+                        if settings["cutoff"]>0:
+                            if settings["cutoff"]>1:
+                                weights_val = weights_val**settings["cutoff"]
+                                weights_val = weights_val/np.mean(weights_val)
+                            else:
+                                weights_val = np.where(weights_val>=np.quantile(weights_val,settings["cutoff"]), weights_val, 0)
                         if settings["gates"]:
                             reg_map_na = np.zeros(np.shape(weights_val))
                             reg_map_na = build_data.extract_region(reg_map_na, regions.get_region_dict("n_atlantic"), lat=lat, lon=lon, mask_builder = 1)
@@ -330,21 +337,23 @@ def train_experiments(
                     exit()
                 # PLOT MODEL EVALUATION METRICS
                 if settings["gates"]:
-                    metrics_dict = model_diagnostics_torch.visualize_metrics(settings, model, soi_test_input[0:int(settings["percent_soi"]* len(soi_test_input))], soi_test_output[0:int(settings["percent_soi"]* len(soi_test_output))],
+                    metrics_dict = model_diagnostics_torch.visualize_metrics(settings, model, soi_test_input, soi_test_output,
                                                                     analog_input, analog_output, lat,
                                                                     lon, weights_val, persist_err,
+                                                                    n_testing_soi=int(soi_test_input.shape[0]*settings["percent_soi"]),
                                                                     n_testing_analogs=int(analog_input.shape[0]*settings["percent_analog"]),
                                                                     analogue_vector = settings["analogue_vec"],
                                                                     soi_train_output = None,
                                                                     fig_savename="subset_skill_score_vs_nanalogues", gates=gates)
                 else:
-                    metrics_dict = model_diagnostics_torch.visualize_metrics(settings, model, soi_test_input[0:int(settings["percent_soi"]* len(soi_test_input))], soi_test_output[0:int(settings["percent_soi"]* len(soi_test_output))],
+                    metrics_dict = model_diagnostics_torch.visualize_metrics(settings, model, soi_test_input, soi_test_output,
                                                                     analog_input, analog_output, lat,
                                                                     lon, weights_val, persist_err,
+                                                                    n_testing_soi=int(soi_test_input.shape[0]*settings["percent_soi"]),
                                                                     n_testing_analogs=int(analog_input.shape[0]*settings["percent_analog"]),
                                                                     analogue_vector = settings["analogue_vec"],
                                                                     soi_train_output = None,
-                                                                    fig_savename="subset_skill_score_vs_nanalogues")
+                                                                    fig_savename="subset_skill_score_vs_nanalogues", analog_dates = analog_dates, soi_dates = soi_dates)
 
                 # SAVE THE METRICS
                 print("almost at the end")

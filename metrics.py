@@ -117,7 +117,7 @@ def super_classification_operation(inputs):
             results.append(np.mean(inputs["soi_output_sample"]!=(scipy.stats.mode(inputs["analog_output"][i_analogs[:n_analogs]], axis=0)).mode)) #fraction that were incorrect
             input_diff.append((np.mean((inputs["soi_input_sample"] - inputs["analog_input"][i_analogs[:n_analogs]])**2))**.5)
             output_spread.append(np.mean(np.var(inputs["analog_output"][i_analogs[:n_analogs]],axis=0)))
-            fraction_mode.append((scipy.stats.mode(inputs["analog_output"][i_analogs[:n_analogs]], axis=0)).count/len(i_analogs[:n_analogs])) #this will return the fraction of analogs that guessed the most common class. A high value implies high certainty, a low value implies low certainty. 
+            fraction_mode.append(np.mean((scipy.stats.mode(inputs["analog_output"][i_analogs[:n_analogs]], axis=0)).count/len(i_analogs[:n_analogs]))) #this will return the fraction of analogs that guessed the most common class. A high value implies high certainty, a low value implies low certainty. 
             if len(np.shape(inputs["analog_output"][i_analogs[:n_analogs]]))==1:
                 entropy.append(entropy_calc_1D(inputs["analog_output"][i_analogs[:n_analogs]]))
             else:
@@ -128,8 +128,20 @@ def super_classification_operation(inputs):
             results.append(np.mean(inputs["soi_output_sample"]!=(scipy.stats.mode(inputs["analog_output"][i_analogs[:n_analogs]], axis=0)).mode))
         return np.stack(results, axis=0)
 
+def date_operation(inputs):
+    assert type(inputs["n_analogs"]) is not int # should be a list-type
+    i_analogs = compute_best_analogs(inputs, inputs["max_analogs"])
+    month_results = []
+    year_results = []
+    for n_analogs in inputs["n_analogs"]:
+        month_results.append(inputs["analog_months"][i_analogs[:n_analogs]])
+        year_results.append(inputs["analog_years"][i_analogs[:n_analogs]])
+
+    return np.stack(month_results, axis=0), np.stack(year_results, axis=0)
+
+
 def entropy_calc_1D(matrix, axis=0, base=None):
-  value,counts = np.unique(matrix, return_counts=True, axis=0)
+  value, counts = np.unique(matrix, return_counts=True, axis=0)
   return scipy.stats.entropy(counts, base=base, axis=0)
 
 def entropy_calc_3D(matrix, axis=0, base=None):

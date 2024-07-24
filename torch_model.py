@@ -111,18 +111,19 @@ class TorchModel_base(nn.Module):
             x = F.relu(self.lin_1(self.dropout_fc(x)))
             x = F.relu(self.lin_2(self.dropout_fc(x)))
             x = self.map(x) + self.bias_only
+            new_size = (x.size()[0],) + self.input_dim1
+            map = x.reshape(new_size)
+            map = map / map.mean(dim=(1, 2, 3), keepdim=True) #comment out this line
         else:
-            x = x1
-            x = self.map(x) + self.bias_only
-        new_size = (x.size()[0],) + self.input_dim1
-        map = x.reshape(new_size)
-        map = map / map.mean(dim=(1, 2, 3), keepdim=True)
+            map = self.bias_only.reshape(self.input_dim1)
         soi_weighted = map * x1
         analog_weighted = map * x2
         diff = ((torch.square((soi_weighted - analog_weighted)).sum(dim=(1,2,3)))) / np.product(self.input_dim1)
+        #return diff, map
         diff = diff.unsqueeze(1)
         output = self.scaler_train(diff)
-        return output, map
+        return output, map #comment out this and instead return diff, map
+
 
 
 #come up with gate
@@ -453,8 +454,11 @@ class MaskTrainer(BaseTrainer):
             # Compute the loss and its gradients
             target = target.view(-1, 1)
             losses = self.criterion(output, target)
-            weights =  ((1/(target + 1e-8))**self.settings["weighted_train"])/(100*10**self.settings["weighted_train"])
-            #weights = weights/weights.mean()
+            if self.settings["weighted_train"] > 0:
+                weights =  ((1/(target + 1e-8))**self.settings["weighted_train"])
+            else:
+                weights = torch.ones_like(target)
+            weights = weights/weights.mean()
             weighted_losses = losses * weights
             loss = weighted_losses.mean()
                 # Add L1 regularization
@@ -504,16 +508,19 @@ class MaskTrainer(BaseTrainer):
                 target = target.view(-1, 1)
                 losses = self.criterion(output, target)
                 if self.settings["weighted_train"] > 0:
-                    weights = ((1/(target + 1e-8))**self.settings["weighted_train"])/(50*10**self.settings["weighted_train"])
+                    weights =  ((1/(target + 1e-8))**self.settings["weighted_train"])
                 else:
                     weights = torch.ones_like(target)
-                #weights = weights/weights.mean()
+                weights = weights/weights.mean()
                 weighted_losses = losses * weights
                 loss = weighted_losses.mean()
                     # Add L1 regularization
                 l1_lambda = self.settings["mask_l1"]  # You can adjust this value
+                l2_inverse_lambda = self.settings["mask_l2_inverse"]
                 l1_norm = torch.norm(self.model.map.weight, p=1)
+                l2_norm = torch.norm(self.model.map.weight, p=2)
                 loss += l1_lambda * l1_norm
+                loss += l2_inverse_lambda / l2_norm
 
                 # Log the results
                 self.batch_log.update("val_loss", loss.item())
