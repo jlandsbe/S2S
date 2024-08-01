@@ -295,14 +295,24 @@ def process_data(data_feature, data_target, settings, input_standard_dict, outpu
     #align our data, so all dates are lined up again before applying the lead time filter. This results in index i having data_input from lead time earlier than the data_output
     #this is used to filter out any years that don't have correspinding years in the input/output
     data_input, data_output = xr.align(data_input, data_output, join="inner", exclude = ("lat","lon")) 
+    #get any tethers you want:
+    tethers = []
+    for idx, lead_amount in enumerate(settings["tethers"]):
+        __, tether_i = filter_lead_times(data_input, data_output, lead_amount)
+        tethers.append(tether_i)
+
      #after this point, don't realign based on time or you'll get rid of lead time
     data_input, data_output = filter_lead_times(data_input, data_output, settings["lead_time"])
+    for idx,t in enumerate(tethers):
+        t = t[0:len(data_input.time)]
+        tethers[idx] = t
+    
     #filter out any years/months that you don't care about seeing in the data 
     #(based on the targets, so if you filtered january out, you would have no target January, but you would use a feautre January to predict a target February)
     if settings["years"] != None:
-        data_input, data_output = filter_years(data_input, data_output, settings["years"])
+        data_input, data_output, tethers = filter_years(data_input, data_output, settings["years"], tethers)
     if settings["months"] != None:
-        data_input, data_output = filter_months(data_input, data_output, settings["months"])
+        data_input, data_output,tethers = filter_months(data_input, data_output, settings["months"], tethers)
     #Here we optionally standardize the data over all samples (i.e. standardize each grid point)
     data_input, input_standard_dict = standardize_data(data_input, input_standard_dict, settings["standardize_bool"])
     data_output, output_standard_dict = standardize_data(data_output, output_standard_dict,settings["standardize_bool"], settings["median"])
@@ -310,19 +320,23 @@ def process_data(data_feature, data_target, settings, input_standard_dict, outpu
     return data_input, data_output, input_standard_dict, output_standard_dict
 
 #cut out any years you don't want
-def filter_years(data_input, data_output, years):
+def filter_years(data_input, data_output, years, tethers =[]):
     years = np.arange(years[0],years[1],1)
-    itime = np.where(np.isin(data_output.time.dt.year.values, years))[0]
+    itime = np.where(np.isin(data_input.time.dt.year.values, years))[0]
     d_inp = data_input[:, itime, :, :, :]
     d_out = data_output[:, itime]
-    return d_inp, d_out
+    for idx, t in enumerate(tethers):
+        tethers[idx] = t[:,itime]
+    return d_inp, d_out, tethers
 
 #cut out any months you don't want
-def filter_months(data_input, data_output, months):
-    itime = np.where(np.isin(data_output.time.dt.month.values, months))[0]
+def filter_months(data_input, data_output, months, tethers = []):
+    itime = np.where(np.isin(data_input.time.dt.month.values, months))[0]
     d_inp = data_input[:, itime, :, :, :]
     d_out = data_output[:, itime]
-    return d_inp, d_out
+    for idx, t in enumerate(tethers):
+        tethers[idx] = t[:,itime]
+    return d_inp, d_out, tethers
     
 #add in shift of lead times between input and output
 def filter_lead_times(data_input, data_output, lead_time):
@@ -516,7 +530,7 @@ def batch_generator(settings, soi_input, soi_output, analog_input, analog_output
         i_soi = rng.choice(np.arange(0, soi_input.shape[0]), batch_size, replace=True)
         i_analog = rng.choice(np.arange(0, analog_input.shape[0]), batch_size, replace=True)
         targets = metrics.get_targets(settings, soi_output[i_soi], analog_output[i_analog])
-        if settings["weighted_train"] == 1:
+        if settings["weighted_train"] != 1:
             weights = 1/(targets+.1)+1
         else:
             weights = np.ones(np.shape(targets))

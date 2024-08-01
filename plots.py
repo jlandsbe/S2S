@@ -250,10 +250,10 @@ def summarize_errors(metrics_dict):
     plt.title('MAE')
 
 
-def summarize_skill_score(metrics_dict, error_type):
+def summarize_skill_score(metrics_dict, settings):
     marker_size = 15
     alpha = .8
-
+    error_type = settings["error_calc"]
     x_plot = metrics.eval_function(metrics_dict["error_climo"])
     x_climatology_baseline = x_plot.copy()
     plt.axhline(y=0, linewidth=1, linestyle='-', color="k", alpha=alpha)
@@ -309,6 +309,8 @@ def summarize_skill_score(metrics_dict, error_type):
     plt.legend(fontsize=8)
     if error_type == "field":
         plt.title('Anomaly Correlation Coefficient')
+    elif settings["percentiles"] != None:
+        plt.title('Classification Accuracy')
     else:
         plt.title('MAE Skill Score')
 

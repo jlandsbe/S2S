@@ -14,7 +14,7 @@ __author__ = "Jamin K. Rader, Elizabeth A. Barnes, and Randal J. Barnes"
 __version__ = "30 March 2023"
 
 # List of experiments to run
-EXP_NAME_LIST = ("seasonal_averages",)
+EXP_NAME_LIST = ("test",)
 if __name__ == "__main__":
 
     start_time = time.time()

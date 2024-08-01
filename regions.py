@@ -83,11 +83,6 @@ def get_region_dict(region=None):
             "lat_range":[-23.5, 23.5],
             "lon_range":[30, 360-80],
         },
-
-        "trop_indopac" :{
-            "lat_range":[-23.5, 23.5],
-            "lon_range":[30, 360-80],
-        },
          "alaska" :{
             "lat_range":[57, 70],
             "lon_range":[360-166, 360-135],

@@ -66,13 +66,16 @@ def run_complex_operations(operation, inputs, pool, chunksize):
     return pool.map(operation, inputs, chunksize=chunksize)
 
 
-def soi_iterable(n_analogs, soi_input, soi_output, analog_input, analog_output, mask, uncertainties = 0, gates = None):
+def soi_iterable(n_analogs, soi_input, soi_output, analog_input, analog_output, mask, uncertainties = 0, val_soi_output=None, val_analog_output=None, gates = None):
     """
     Create an iterable for a parallel approach to metric assessment
     """
     for i_soi in range(soi_input.shape[0]):
         if gates != None:
             mask = gates[i_soi]
+        if type(val_soi_output) == type(None):
+            val_soi_output = soi_output
+            val_analog_output = analog_output
         inputs = {"n_analogs": n_analogs,
                   "max_analogs": np.max(n_analogs),
                   "analog_input": analog_input,
@@ -81,6 +84,8 @@ def soi_iterable(n_analogs, soi_input, soi_output, analog_input, analog_output, 
                   "soi_output_sample": soi_output[i_soi],
                   "mask": mask,
                   "uncertainties": uncertainties,
+                  "val_soi_output": val_soi_output[i_soi],
+                  "val_analog_output": val_analog_output,
                   }
         yield inputs
 
@@ -135,12 +140,17 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
         #soi_output = soi_output - 1.0*(soi_output <-)
 
     if settings["percentiles"]!=None:
+        analog_output_val = analog_output
+        soi_output_val = soi_output
         low_cap_an = np.percentile(analog_output, settings["percentiles"][0], axis = 0)
         high_base_an = np.percentile(analog_output, settings["percentiles"][1], axis = 0)
         low_cap_soi = np.percentile(soi_output, settings["percentiles"][0], axis = 0)
         high_base_soi = np.percentile(soi_output, settings["percentiles"][1], axis = 0)
         analog_output = np.where(analog_output <= low_cap_an, -1, np.where(analog_output>=high_base_an, 1, 0))
         soi_output = np.where(soi_output <= low_cap_soi, -1, np.where(soi_output>=high_base_soi, 1, 0))
+    else:
+        analog_output_val = None
+        soi_output_val = None
 
     # Number of Processes for Pool (all but two)
     n_processes = os.cpu_count() - 2
@@ -249,13 +259,14 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                             plots.yearly_analysis(soi_year_repeated, best_analog_years, year_length, settings)
                             plots.monthly_analysis(soi_months_repeated, best_analog_months, settings)
                             exit()
-                    else: 
+                    else:
                         soi_iterable_instance = soi_iterable(n_analogues,
                                                             soi_input,
                                                             soi_output,
                                                             analog_input,
                                                             analog_output,
-                                                            mask, 1, gates = gates)
+                                                            mask, 1, val_analog_output=analog_output_val, val_soi_output=soi_output_val, gates = gates)
+ 
                     if settings["median"] or settings["percentiles"]!=None:
                         net_err = np.array(run_complex_operations(metrics.super_classification_operation,
                                                                     soi_iterable_instance,
@@ -352,7 +363,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                                             soi_output,
                                             analog_input,
                                             analog_output,
-                                            sqrt_area_weights, uncertainties=1)
+                                            sqrt_area_weights, uncertainties=1, val_analog_output=analog_output_val, val_soi_output=soi_output_val)
         else:
             soi_iterable_instance = soi_iterable(n_analogues,
                                             soi_input,
@@ -410,12 +421,17 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                                                 soi_output,
                                                 analog_reg,
                                                 analog_output,
-                                                sqrt_area_weights)
+                                                sqrt_area_weights, uncertainties = 1, val_analog_output=analog_output_val, val_soi_output=soi_output_val)
         if settings["median"] or settings["percentiles"]!=None:
-            error_corr[:, :] = run_complex_operations(metrics.super_classification_operation,
+            error_corr_reg = np.array(run_complex_operations(metrics.super_classification_operation,
                                                             soi_iterable_instance,
                                                             pool,
-                                                            chunksize=soi_input.shape[0]//n_processes,)
+                                                            chunksize=soi_input.shape[0]//n_processes,))
+            error_corr[:, :] = error_corr_reg[:,0,:]
+            regional_analog_match_error = error_corr_reg[:,1,:] 
+            regional_prediction_spread = error_corr_reg[:,2,:]
+            regional_modal_fraction = error_corr_reg[:,3,:]
+            regional_entropy_spread = error_corr_reg[:,4,:]
         elif settings["error_calc"] == "map":
             #number of analogs x time x lat x lon
             error_corr = run_complex_operations(metrics.map_operation,
@@ -433,10 +449,13 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                                                             pool,
                                                             chunksize=soi_input.shape[0]//n_processes,)
         else:
-            error_corr[:, :] = run_complex_operations(metrics.mse_operation,
+            error_corr_reg = np.array(run_complex_operations(metrics.super_classification_operation,
                                                             soi_iterable_instance,
                                                             pool,
-                                                            chunksize=soi_input.shape[0]//n_processes,)
+                                                            chunksize=soi_input.shape[0]//n_processes,))
+            error_corr[:, :] = error_corr_reg[:,0,:]
+            regional_analog_match_error = error_corr_reg[:,1,:] 
+            regional_prediction_spread = error_corr_reg[:,2,:]
         print("finished target region error")
         
     # -----------------------
@@ -445,13 +464,13 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
         with Pool(n_processes) as pool:
             cust_reg_map = np.zeros(np.shape(mask))
             cust_reg_map = build_data.extract_region(cust_reg_map, regions.get_region_dict(settings["correlation_region_name"]), lat=lat, lon=lon, mask_builder = 1)
-            if settings["median"] or settings["error_calc"]=="mse"or settings["percentiles"]!=None:
+            if settings["median"] or settings["error_calc"]=="mse" or settings["percentiles"]!=None:
                 soi_iterable_instance = soi_iterable(n_analogues,
                                                 soi_input,
                                                 soi_output,
                                                 analog_input,
                                                 analog_output,
-                                                cust_reg_map, uncertainties=1)
+                                                cust_reg_map, uncertainties = 1, val_analog_output=analog_output_val, val_soi_output=soi_output_val,)
             else:
                 soi_iterable_instance = soi_iterable(n_analogues,
                                                 soi_input,
@@ -527,16 +546,21 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
         network_confidence_dict = {"Analog Match": analog_match_error, "Prediction Spread": prediction_spread, "Modal Fraction":modal_fraction,"Entropy":entropy_spread}
         global_confidence_dict = {"Analog Match": global_analog_match_error, "Prediction Spread": global_prediction_spread, "Modal Fraction":global_modal_fraction,"Entropy":global_entropy_spread}
         NH_cofidence_dict = {"Analog Match": NH_analog_match_error, "Prediction Spread": NH_prediction_spread, "Modal Fraction":NH_modal_fraction,"Entropy":NH_entropy_spread}
+        regional_cofidence_dict = {"Analog Match": regional_analog_match_error, "Prediction Spread": regional_prediction_spread, "Modal Fraction":regional_modal_fraction,"Entropy":regional_entropy_spread}
         random_confidence_dict = {}
     else:
         network_confidence_dict = {"Analog Match": analog_match_error, "Prediction Spread": prediction_spread}
         global_confidence_dict = {"Analog Match": global_analog_match_error, "Prediction Spread": global_prediction_spread}
         NH_cofidence_dict = {"Analog Match": NH_analog_match_error, "Prediction Spread": NH_prediction_spread}
+        regional_cofidence_dict = {"Analog Match": regional_analog_match_error, "Prediction Spread": regional_prediction_spread}
         random_confidence_dict = {"Prediction Spread": random_output_spread.T}
     
     #drop global for now:
+    #global_confidence_dict={}
+    NH_cofidence_dict={}
+    #regional_cofidence_dict={}
     global_confidence_dict={}
-    error_conf_dict = {"Network":(error_network, network_confidence_dict, "solid","red"), "Global":(error_globalcorr, global_confidence_dict, "densely dotted", "palegreen"), "Northern Hemisphere":(error_customcorr, NH_cofidence_dict, "dashed", "cornflowerblue"), "Random":(np.array(error_random).T, random_confidence_dict, "dashdot", "gold")}
+    error_conf_dict = {"Network":(error_network, network_confidence_dict, "solid","red"), "Northern Hemisphere":(error_customcorr, NH_cofidence_dict, "dashed", "cornflowerblue"), "Global":(error_globalcorr, global_confidence_dict, "densely dotted", "palegreen"), "Regional":(error_corr, regional_cofidence_dict, "dashed", "navajowhite"), "Random":(np.array(error_random).T, random_confidence_dict, "dashdot", "gold")}
     plots.confidence_plot(analogue_vector, error_conf_dict, settings)
 
     # plots.uncertainty_whiskers(analogue_vector, error_network, analog_match_error, prediction_spread, settings, 
@@ -650,7 +674,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
 
         # MAKE SUMMARY-SKILL PLOT
         plt.figure(figsize=(8, 4))
-        plots.summarize_skill_score(metrics_dict, settings["error_calc"])
+        plots.summarize_skill_score(metrics_dict, settings)
         plt.text(0.0, .99, ' ' + settings["savename_prefix"] + '\n smooth_time: [' + str(settings["smooth_len_input"])
                 + ', ' + str(settings["smooth_len_output"]) + '], leadtime: ' + str(settings["lead_time"]),
                 fontsize=6, color="gray", va="top", ha="left", fontfamily="monospace", transform=plt.gca().transAxes)

@@ -116,7 +116,7 @@ def super_classification_operation(inputs):
         for n_analogs in inputs["n_analogs"]:
             results.append(np.mean(inputs["soi_output_sample"]!=(scipy.stats.mode(inputs["analog_output"][i_analogs[:n_analogs]], axis=0)).mode)) #fraction that were incorrect
             input_diff.append((np.mean((inputs["soi_input_sample"] - inputs["analog_input"][i_analogs[:n_analogs]])**2))**.5)
-            output_spread.append(np.mean(np.var(inputs["analog_output"][i_analogs[:n_analogs]],axis=0)))
+            output_spread.append(np.mean(np.var(inputs["val_analog_output"][i_analogs[:n_analogs]],axis=0))) #variance of actual values not percentile classes
             fraction_mode.append(np.mean((scipy.stats.mode(inputs["analog_output"][i_analogs[:n_analogs]], axis=0)).count/len(i_analogs[:n_analogs]))) #this will return the fraction of analogs that guessed the most common class. A high value implies high certainty, a low value implies low certainty. 
             if len(np.shape(inputs["analog_output"][i_analogs[:n_analogs]]))==1:
                 entropy.append(entropy_calc_1D(inputs["analog_output"][i_analogs[:n_analogs]]))

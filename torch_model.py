@@ -90,6 +90,9 @@ class TorchModel_base(nn.Module):
 
         # Define layers for x2
         self.scaler_train = nn.Linear(1, 1)
+                # Define parameters for positive weight and bias
+        self.scaler_train_weight_param = nn.Parameter(torch.ones(1))  # Parameter to be transformed to positive weight
+        self.scaler_train_bias_param = nn.Parameter(torch.ones(1))    
     def _calculate_conv_output_dim(self, input_dim):
         x = torch.randn(1, *input_dim)
         x = x.permute(0, 3, 1, 2)  # Change from NHWC to NCHW
@@ -116,11 +119,14 @@ class TorchModel_base(nn.Module):
             map = map / map.mean(dim=(1, 2, 3), keepdim=True) #comment out this line
         else:
             map = self.bias_only.reshape(self.input_dim1)
+            map = map / map.mean()
         soi_weighted = map * x1
         analog_weighted = map * x2
         diff = ((torch.square((soi_weighted - analog_weighted)).sum(dim=(1,2,3)))) / np.product(self.input_dim1)
         #return diff, map
         diff = diff.unsqueeze(1)
+        positive_scaling = torch.square(self.scaler_train_weight_param)
+        output = positive_scaling * diff + self.scaler_train_bias_param
         output = self.scaler_train(diff)
         return output, map #comment out this and instead return diff, map
 
@@ -451,10 +457,11 @@ class MaskTrainer(BaseTrainer):
             # Make predictions for this batch
             output, map = self.model(soi_input, analog_input)
 
+
             # Compute the loss and its gradients
             target = target.view(-1, 1)
             losses = self.criterion(output, target)
-            if self.settings["weighted_train"] > 0:
+            if self.settings["weighted_train"] != 0:
                 weights =  ((1/(target + 1e-8))**self.settings["weighted_train"])
             else:
                 weights = torch.ones_like(target)
@@ -464,8 +471,8 @@ class MaskTrainer(BaseTrainer):
                 # Add L1 regularization
             l1_lambda = self.settings["mask_l1"]  # You can adjust this value
             l2_inverse_lambda = self.settings["mask_l2_inverse"]
-            l1_norm = torch.norm(self.model.map.weight, p=1)
-            l2_norm = torch.norm(self.model.map.weight, p=2)
+            l1_norm = torch.norm(map, p=1)
+            l2_norm = torch.norm(map, p=2)
             loss += l1_lambda * l1_norm
             loss += l2_inverse_lambda / l2_norm
             loss.backward()
@@ -504,10 +511,12 @@ class MaskTrainer(BaseTrainer):
                 # Make predictions for this batch
                 output, map = self.model(soi_input, analog_input)
 
+               
+
                 # Compute the loss and its gradients
                 target = target.view(-1, 1)
                 losses = self.criterion(output, target)
-                if self.settings["weighted_train"] > 0:
+                if self.settings["weighted_train"] != 0:
                     weights =  ((1/(target + 1e-8))**self.settings["weighted_train"])
                 else:
                     weights = torch.ones_like(target)
@@ -517,8 +526,8 @@ class MaskTrainer(BaseTrainer):
                     # Add L1 regularization
                 l1_lambda = self.settings["mask_l1"]  # You can adjust this value
                 l2_inverse_lambda = self.settings["mask_l2_inverse"]
-                l1_norm = torch.norm(self.model.map.weight, p=1)
-                l2_norm = torch.norm(self.model.map.weight, p=2)
+                l1_norm = torch.norm(map, p=1)
+                l2_norm = torch.norm(map, p=2)
                 loss += l1_lambda * l1_norm
                 loss += l2_inverse_lambda / l2_norm
 

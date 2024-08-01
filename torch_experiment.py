@@ -183,182 +183,195 @@ def train_experiments(
             soi_dates
         ) = build_data.build_data(settings, data_directory)
         if settings["preprocess"]:
-            exit()
-        if settings["total_synthetic"]:
-            analog_input = make_mjo_syn(settings, 1, 2500)
-            analog_output = make_mjo_syn(settings, 0, 2500)
-            soi_train_input = make_mjo_syn( settings, 1, 2500)
-            soi_train_output = make_mjo_syn(settings, 0, 2500)
-            soi_val_input = make_mjo_syn(settings, 1,1000)
-            soi_val_output = make_mjo_syn(settings, 0,1000)
-            soi_test_input = make_mjo_syn(settings, 1,1000)
-            soi_test_output = make_mjo_syn(settings, 0,1000)
-        for rng_seed in settings["rng_seed_list"]:  #0 to 100 by 10s
-            settings["rng_seed"] = rng_seed
+            print("Preprocessing completed")
+        else:
+            if settings["total_synthetic"]:
+                analog_input = make_mjo_syn(settings, 1, 2500)
+                analog_output = make_mjo_syn(settings, 0, 2500)
+                soi_train_input = make_mjo_syn( settings, 1, 2500)
+                soi_train_output = make_mjo_syn(settings, 0, 2500)
+                soi_val_input = make_mjo_syn(settings, 1,1000)
+                soi_val_output = make_mjo_syn(settings, 0,1000)
+                soi_test_input = make_mjo_syn(settings, 1,1000)
+                soi_test_output = make_mjo_syn(settings, 0,1000)
+            for rng_seed in settings["rng_seed_list"]:  #0 to 100 by 10s
+                settings["rng_seed"] = rng_seed
 
-            for model_type in settings["model_type_list"]:
-                settings["model_type"] = model_type
-                print(model_type)
-                # Create the model name.
-                savename_prefix = (
-                        settings["exp_name"]
-                        + "_" + settings["model_type"] + "_"
-                        + f"rng_seed_{settings['rng_seed']}"
-                )
-                settings["savename_prefix"] = savename_prefix
-                print('--- RUNNING ' + savename_prefix + '---')
+                for model_type in settings["model_type_list"]:
+                    settings["model_type"] = model_type
+                    print(model_type)
+                    # Create the model name.
+                    savename_prefix = (
+                            settings["exp_name"]
+                            + "_" + settings["model_type"] + "_"
+                            + f"rng_seed_{settings['rng_seed']}"
+                    )
+                    settings["savename_prefix"] = savename_prefix
+                    print('--- RUNNING ' + savename_prefix + '---')
 
-                # Check if the model metrics exist and overwrite is off.
-                if settings["gif"]:
-                    output_plot = analog_input*np.nan
-                    insert_row = (analog_input.shape[1] - analog_output.shape[1]) // 2
-                    output_plot[:,insert_row:insert_row + analog_output.shape[1], :, :] = analog_output[:,:,:,np.newaxis]
-                    model_diagnostics_torch.video_syn_data(settings,analog_input[0:200,:,:,:],lat,lon, sv= "_input_")
-                    model_diagnostics_torch.video_syn_data(settings,output_plot[0:200,:,:,:],lat,lon, sv = "_output_")
-                # Make, compile, train, and save the model.
-                tf.keras.backend.clear_session()
-                np.random.seed(settings["rng_seed"])
-                random.seed(settings["rng_seed"])
-                tf.random.set_seed(settings["rng_seed"])
-                print(settings["model_type"])
-                if settings["model_type"] == "ann_analog_model":
-                    # model = build_model.build_ann_analog_model(
-                    #     settings, [soi_train_input, analog_input])
-                    pass
-                elif settings["model_type"] == "ann_model":
-                    # model = build_model.build_ann_model(
-                    #     settings, [analog_input])
-                    pass
-                elif settings["model_type"] == "interp_model" and not settings["presaved_mask"]:
-                    trainset = CustomDataset(analog_input, soi_train_input, analog_output, soi_train_output)
-                    valset = CustomDataset(analog_input, soi_val_input, analog_output, soi_val_output, np.random.randint(0, len(soi_val_input), size=min(settings["max_iterations"], len(analog_input))), np.random.randint(0, len(analog_input), size=min(settings["max_iterations"], len(analog_input))))
-                    train_loader = DataLoader(
-                    trainset,
-                    batch_size=settings["batch_size"],
-                    shuffle=False,
-                    drop_last=False,
-                )
-                    val_loader = DataLoader(
-                    valset,
-                    batch_size=settings["val_batch_size"],
-                    shuffle=False,
-                    drop_last=False,
-)
-                    model = TorchModel_base(settings, np.shape(soi_train_input)[1:])
-                    criterion = torch.nn.MSELoss(reduction='none')
-                    optimizer = torch.optim.Adam(model.parameters(), lr=settings["interp_learning_rate"])
-                    device = prepare_device()
-                    metric_funcs = []
-                    trainer = MaskTrainer(
-                        model,
-                        criterion,
-                        metric_funcs,
-                        optimizer,
-                        max_epochs=settings["max_epochs"],
-                        data_loader=train_loader,
-                        validation_data_loader=val_loader,
-                        device=device,
-                        settings=settings,
-)
-                    torchinfo.summary(
-    model,
-    [
-        analog_input[: settings["batch_size"]].shape,
-        soi_train_input[: settings["batch_size"]].shape,
-    ],
-    verbose=1,
-    col_names=("input_size", "output_size", "num_params"),
-)
-
-                    model.to(device)
-                    trainer.fit()
-                    trainer.plot_loss()
-                    model_savename = dir_settings["model_directory"] + savename_prefix + "_torch_model"
-                    torch.save(model.state_dict(),model_savename)
-                elif settings["presaved_mask"]:
+                    # Check if the model metrics exist and overwrite is off.
+                    if settings["gif"]:
+                        output_plot = analog_input*np.nan
+                        insert_row = (analog_input.shape[1] - analog_output.shape[1]) // 2
+                        output_plot[:,insert_row:insert_row + analog_output.shape[1], :, :] = analog_output[:,:,:,np.newaxis]
+                        model_diagnostics_torch.video_syn_data(settings,analog_input[0:200,:,:,:],lat,lon, sv= "_input_")
+                        model_diagnostics_torch.video_syn_data(settings,output_plot[0:200,:,:,:],lat,lon, sv = "_output_")
+                    # Make, compile, train, and save the model.
+                    tf.keras.backend.clear_session()
+                    np.random.seed(settings["rng_seed"])
+                    random.seed(settings["rng_seed"])
+                    tf.random.set_seed(settings["rng_seed"])
+                    print(settings["model_type"])
+                    if settings["model_type"] == "ann_analog_model":
+                        # model = build_model.build_ann_analog_model(
+                        #     settings, [soi_train_input, analog_input])
+                        pass
+                    elif settings["model_type"] == "ann_model":
+                        # model = build_model.build_ann_model(
+                        #     settings, [analog_input])
+                        pass
+                    elif settings["model_type"] == "interp_model" and not settings["presaved_mask"]:
+                        trainset = CustomDataset(analog_input, soi_train_input, analog_output, soi_train_output)
+                        valset = CustomDataset(analog_input, soi_val_input, analog_output, soi_val_output, np.random.randint(0, len(soi_val_input), size=min(settings["max_iterations"], len(analog_input))), np.random.randint(0, len(analog_input), size=min(settings["max_iterations"], len(analog_input))))
+                        train_loader = DataLoader(
+                        trainset,
+                        batch_size=settings["batch_size"],
+                        shuffle=False,
+                        drop_last=False,
+                    )
+                        val_loader = DataLoader(
+                        valset,
+                        batch_size=settings["val_batch_size"],
+                        shuffle=False,
+                        drop_last=False,
+    )
                         model = TorchModel_base(settings, np.shape(soi_train_input)[1:])
+                        criterion = torch.nn.MSELoss(reduction='none')
+                        optimizer = torch.optim.Adam(model.parameters(), lr=settings["interp_learning_rate"])
+                        device = prepare_device()
+                        metric_funcs = []
+                        trainer = MaskTrainer(
+                            model,
+                            criterion,
+                            metric_funcs,
+                            optimizer,
+                            max_epochs=settings["max_epochs"],
+                            data_loader=train_loader,
+                            validation_data_loader=val_loader,
+                            device=device,
+                            settings=settings,
+    )
+                        torchinfo.summary(
+        model,
+        [
+            analog_input[: settings["batch_size"]].shape,
+            soi_train_input[: settings["batch_size"]].shape,
+        ],
+        verbose=1,
+        col_names=("input_size", "output_size", "num_params"),
+    )
+
+                        model.to(device)
+                        trainer.fit()
+                        trainer.plot_loss()
                         model_savename = dir_settings["model_directory"] + savename_prefix + "_torch_model"
-                        model.load_state_dict(torch.load(model_savename))
-                else:
-                     raise NotImplementedError("no such model coded yet")
-                if settings["model_type"] == "interp_model":
-                        map_layer = getattr(model, "bias_only")
-                        biases = map_layer.data
-                        weights_val = biases.numpy().reshape(np.shape(analog_input)[1:])
-                        if settings["cutoff"]>0:
-                            if settings["cutoff"]>1:
-                                weights_val = weights_val**settings["cutoff"]
-                                weights_val = weights_val/np.mean(weights_val)
-                            else:
-                                weights_val = np.where(weights_val>=np.quantile(weights_val,settings["cutoff"]), weights_val, 0)
-                        if settings["gates"]:
-                            reg_map_na = np.zeros(np.shape(weights_val))
-                            reg_map_na = build_data.extract_region(reg_map_na, regions.get_region_dict("n_atlantic"), lat=lat, lon=lon, mask_builder = 1)
-                            reg_map_np = np.zeros(np.shape(weights_val))
-                            reg_map_np = build_data.extract_region(reg_map_np, regions.get_region_dict("n_pacific"), lat=lat, lon=lon, mask_builder = 1)
-                            map_options = np.stack([reg_map_na, reg_map_np])
-                            model_diagnostics_torch.visualize_interp_model(settings, np.squeeze(np.stack([reg_map_na, reg_map_np], axis=-1)), lat, lon)
-                            #Here is where I can run the network
-                            gate_model = CombinedGateModel(settings, np.shape(soi_train_input)[1:], map_options)
-                            criterion = torch.nn.MSELoss()
-                            optimizer = torch.optim.Adam(model.parameters(), lr=settings["interp_learning_rate"])
-                            device = prepare_device()
-                            metric_funcs = []
-                            trainer = GateTrainer(
-                                gate_model,
-                                criterion,
-                                metric_funcs,
-                                optimizer,
-                                max_epochs=settings["gate_max_epochs"],
-                                data_loader=train_loader,
-                                validation_data_loader=val_loader,
-                                device=device,
-                                settings=settings,
-        )
-                            gate_model.to(device)
-                            trainer.fit()
+                        torch.save(model.state_dict(),model_savename)
+                    elif settings["presaved_mask"]:
+                            model = TorchModel_base(settings, np.shape(soi_train_input)[1:])
+                            model_savename = dir_settings["model_directory"] + savename_prefix + "_torch_model"
+                            model.load_state_dict(torch.load(model_savename))
+                    else:
+                        raise NotImplementedError("no such model coded yet")
+                    if settings["model_type"] == "interp_model":
+                            map_layer = getattr(model, "bias_only")
+                            biases = map_layer.data
+                            weights_val = biases.numpy().reshape(np.shape(analog_input)[1:])
+                            #weights_val = weights_val/np.mean(weights_val)
+                            if settings["cutoff"]>0:
+                                if settings["cutoff"]>1:
+                                    weights_val = weights_val**settings["cutoff"]
+                                    weights_val = weights_val/np.mean(weights_val)
+                                else:
+                                    weights_val = np.where(weights_val>=np.quantile(weights_val,settings["cutoff"]), weights_val, 0)
+                                    # Number of rows in the array
+                                    num_rows = weights_val.shape[0]
 
-                            gate_model.eval()
-                            with torch.no_grad():
-                                soi_test_input_tensor = torch.from_numpy(soi_test_input).float()
-                                gate_tensor = gate_model.gate_model(soi_test_input_tensor)
-                                gates = gate_tensor.cpu().numpy()
-                            plt.hist(np.argmax(gates,axis=-1), align='mid', bins=[-.25,.25,.75,1.25], edgecolor='black', linewidth=1.2, color='cornflowerblue')
-                            plt.title("Gate Distribution: 0 = NA, 1 = NP")
-                            plt.savefig(dir_settings["figure_directory"] + settings["savename_prefix"] +
-                    '_gate_distribution.png', dpi=300, bbox_inches='tight')
-                    
-                        model_diagnostics_torch.visualize_interp_model(settings, weights_val, lat, lon)
-                else:
-                    weights_val = None
+                                    # Calculate the third of the total number of rows
+                                    third = num_rows // 3
+
+                                    # Set the first third of rows to 0
+                                    weights_val[:third, :,:] = 0
+
+                                    # Set the last third of rows to 0
+                                    weights_val[-third:, :,:] = 0
+                            if settings["gates"]:
+                                reg_map_na = np.zeros(np.shape(weights_val))
+                                reg_map_na = build_data.extract_region(reg_map_na, regions.get_region_dict("n_atlantic"), lat=lat, lon=lon, mask_builder = 1)
+                                reg_map_np = np.zeros(np.shape(weights_val))
+                                reg_map_np = build_data.extract_region(reg_map_np, regions.get_region_dict("n_pacific"), lat=lat, lon=lon, mask_builder = 1)
+                                map_options = np.stack([reg_map_na, reg_map_np])
+                                model_diagnostics_torch.visualize_interp_model(settings, np.squeeze(np.stack([reg_map_na, reg_map_np], axis=-1)), lat, lon)
+                                #Here is where I can run the network
+                                gate_model = CombinedGateModel(settings, np.shape(soi_train_input)[1:], map_options)
+                                criterion = torch.nn.MSELoss()
+                                optimizer = torch.optim.Adam(model.parameters(), lr=settings["interp_learning_rate"])
+                                device = prepare_device()
+                                metric_funcs = []
+                                trainer = GateTrainer(
+                                    gate_model,
+                                    criterion,
+                                    metric_funcs,
+                                    optimizer,
+                                    max_epochs=settings["gate_max_epochs"],
+                                    data_loader=train_loader,
+                                    validation_data_loader=val_loader,
+                                    device=device,
+                                    settings=settings,
+            )
+                                gate_model.to(device)
+                                trainer.fit()
+
+                                gate_model.eval()
+                                with torch.no_grad():
+                                    soi_test_input_tensor = torch.from_numpy(soi_test_input).float()
+                                    gate_tensor = gate_model.gate_model(soi_test_input_tensor)
+                                    gates = gate_tensor.cpu().numpy()
+                                plt.hist(np.argmax(gates,axis=-1), align='mid', bins=[-.25,.25,.75,1.25], edgecolor='black', linewidth=1.2, color='cornflowerblue')
+                                plt.title("Gate Distribution: 0 = NA, 1 = NP")
+                                plt.savefig(dir_settings["figure_directory"] + settings["savename_prefix"] +
+                        '_gate_distribution.png', dpi=300, bbox_inches='tight')
+                        
+                            model_diagnostics_torch.visualize_interp_model(settings, weights_val, lat, lon)
+                    else:
+                        weights_val = None
 
 
-                if settings["mask_only"]:
-                    exit()
-                # PLOT MODEL EVALUATION METRICS
-                if settings["gates"]:
-                    metrics_dict = model_diagnostics_torch.visualize_metrics(settings, model, soi_test_input, soi_test_output,
-                                                                    analog_input, analog_output, lat,
-                                                                    lon, weights_val, persist_err,
-                                                                    n_testing_soi=int(soi_test_input.shape[0]*settings["percent_soi"]),
-                                                                    n_testing_analogs=int(analog_input.shape[0]*settings["percent_analog"]),
-                                                                    analogue_vector = settings["analogue_vec"],
-                                                                    soi_train_output = None,
-                                                                    fig_savename="subset_skill_score_vs_nanalogues", gates=gates)
-                else:
-                    metrics_dict = model_diagnostics_torch.visualize_metrics(settings, model, soi_test_input, soi_test_output,
-                                                                    analog_input, analog_output, lat,
-                                                                    lon, weights_val, persist_err,
-                                                                    n_testing_soi=int(soi_test_input.shape[0]*settings["percent_soi"]),
-                                                                    n_testing_analogs=int(analog_input.shape[0]*settings["percent_analog"]),
-                                                                    analogue_vector = settings["analogue_vec"],
-                                                                    soi_train_output = None,
-                                                                    fig_savename="subset_skill_score_vs_nanalogues", analog_dates = analog_dates, soi_dates = soi_dates)
+                    if settings["mask_only"]:
+                        exit()
+                    # PLOT MODEL EVALUATION METRICS
+                    if settings["gates"]:
+                        metrics_dict = model_diagnostics_torch.visualize_metrics(settings, model, soi_test_input, soi_test_output,
+                                                                        analog_input, analog_output, lat,
+                                                                        lon, weights_val, persist_err,
+                                                                        n_testing_soi=int(soi_test_input.shape[0]*settings["percent_soi"]),
+                                                                        n_testing_analogs=int(analog_input.shape[0]*settings["percent_analog"]),
+                                                                        analogue_vector = settings["analogue_vec"],
+                                                                        soi_train_output = None,
+                                                                        fig_savename="subset_skill_score_vs_nanalogues", gates=gates)
+                    else:
+                        metrics_dict = model_diagnostics_torch.visualize_metrics(settings, model, soi_test_input, soi_test_output,
+                                                                        analog_input, analog_output, lat,
+                                                                        lon, weights_val, persist_err,
+                                                                        n_testing_soi=int(soi_test_input.shape[0]*settings["percent_soi"]),
+                                                                        n_testing_analogs=int(analog_input.shape[0]*settings["percent_analog"]),
+                                                                        analogue_vector = settings["analogue_vec"],
+                                                                        soi_train_output = None,
+                                                                        fig_savename="subset_skill_score_vs_nanalogues", analog_dates = analog_dates, soi_dates = soi_dates)
 
-                # SAVE THE METRICS
-                print("almost at the end")
-                with open(dir_settings["metrics_directory"]+settings["savename_prefix"]
-                          + '_subset_metrics.pickle', 'wb') as f:
-                    pickle.dump(metrics_dict, f, protocol=pickle.HIGHEST_PROTOCOL)
+                    # SAVE THE METRICS
+                    print("almost at the end")
+                    with open(dir_settings["metrics_directory"]+settings["savename_prefix"]
+                            + '_subset_metrics.pickle', 'wb') as f:
+                        pickle.dump(metrics_dict, f, protocol=pickle.HIGHEST_PROTOCOL)
 
 

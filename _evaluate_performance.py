@@ -48,7 +48,7 @@ if __name__ == "__main__":
             input_standard_dict,
             output_standard_dict,
             lat,
-            lon, persist_err
+            lon, persist_err, __, __
         ) = build_data.build_data(settings, dir_settings["data_directory"])
 
         for rng_seed in settings["rng_seed_list"]:
@@ -130,7 +130,7 @@ if __name__ == "__main__":
             # PLOT THE METRICS
             plt.subplot(3, 1, i_rng + 1)
 
-            plots.summarize_skill_score(plot_metrics, settings["error_calc"])
+            plots.summarize_skill_score(plot_metrics, settings)
 
             # plot_ann_metrics = ann_analog_metrics
             # y_plot = 1. - metrics.eval_function(plot_ann_metrics["error_network"]) / metrics.eval_function(
