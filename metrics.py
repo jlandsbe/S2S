@@ -16,8 +16,18 @@ __version__ = "30 March 2023"
 
 def compute_best_analogs(inputs, n_analogs):
     #the shape here will be lat x lon x number of channels for the inputs/masks
-    mimse = (np.mean((inputs["soi_input_sample"]*inputs["mask"] - inputs["analog_input"]*inputs["mask"]) ** 2,
-                     axis=(1, 2, 3)))
+    if len(np.shape(inputs["progression_soi"]))>2:
+        j = np.shape(inputs["progression_soi"])[0]  # Number of times to repeat
+
+# Repeat along a new axis (expand the dimensions first)
+        arr_expanded = np.expand_dims(inputs["mask"], axis=-1)  # Shape becomes (m, n, p, 1)
+        prog_mask = np.repeat(arr_expanded, j, axis=-1) 
+        prog_mimse = (np.moveaxis(inputs["progression_soi"], 0, -1) - np.moveaxis(inputs["progression_analog"], 0, -1))*prog_mask
+        true_lead_mimse = np.expand_dims(inputs["soi_input_sample"]*inputs["mask"] - inputs["analog_input"]*inputs["mask"],axis=-1)
+        mimse = np.mean((np.concatenate((prog_mimse,true_lead_mimse),axis=-1))**2,axis=(1,2,3,4))
+    else:
+        mimse = (np.mean((inputs["soi_input_sample"]*inputs["mask"] - inputs["analog_input"]*inputs["mask"]) ** 2,
+                        axis=(1, 2, 3)))
     i_analogs = np.argsort(mimse, axis=0)[:n_analogs]
     return i_analogs  #this returns the best analogs' indices based on mimse
 

@@ -119,7 +119,7 @@ def build_data(settings, data_directory):
         lat = analog_input["lat"] #keep
         lon = analog_input["lon"] #keep
 
-        area_weights = np.cos(np.deg2rad(lat)).to_numpy() #keep
+        area_weights = np.abs(np.cos(np.deg2rad(lat))).to_numpy() #keep
 ###### everything below here seems fine, just loading and saving data, etc.
         print(f"saving the pre-saved training/validation/testing data.")
     #save and then reload the data
@@ -232,13 +232,13 @@ def process_input_output(data_directory, settings, input_standard_dict=None,
                          output_standard_dict=None, obs_info=None, members=None):
 
     # get the input (feautre) and output (target) data as xarrays
-    data_target = get_netcdf(settings["target_var"], data_directory, settings, members=members, new = settings["new_detrend"])
-    data_feature = get_netcdf(settings["feature_var"], data_directory, settings, members=members, new = settings["new_detrend"])
+    data_target = get_netcdf(settings["target_var"], data_directory, settings, members=members)
+    data_feature = get_netcdf(settings["feature_var"], data_directory, settings, members=members)
     #if you are using 2 feature to predict, get the extra channel
     if settings["extra_channel"] != None:
         extra_channel = []
         for chan_idx, chan_nam in enumerate(settings["extra_channel"]):
-            extra_channel.append(get_netcdf(chan_nam, data_directory, settings, members=members, time_tendency=settings["time_tendency"][chan_idx], new = settings["new_detrend"]))
+            extra_channel.append(get_netcdf(chan_nam, data_directory, settings, members=members, time_tendency=settings["time_tendency"][chan_idx]))
     else:
         extra_channel = None
     #optionally set your data to random values for testing purposes
@@ -260,14 +260,15 @@ def process_input_output(data_directory, settings, input_standard_dict=None,
 
 
     (data_input, data_output, input_standard_dict, output_standard_dict, tethers, progressions) = process_data(data_feature, data_output, settings, input_standard_dict, output_standard_dict, extra_channel)
-    persist_err = np.mean(compute_persistance(data_output, settings["lead_time"], settings["error_calc"]))
+    persist_err = np.mean(compute_persistance(data_output, settings, settings["lead_time"], settings["error_calc"]))
 
     gc.collect()
     return data_input, data_output, input_standard_dict, output_standard_dict, persist_err, tethers, progressions
 
-def compute_persistance(output_array, leadtime, error_type = "mse"):
-    array_past = output_array.shift(time = leadtime).dropna(dim="time")
-    array_fut = output_array[:, leadtime:]
+def compute_persistance(output_array, settings, leadtime, error_type = "mse"):
+    tot_lead = leadtime + int((settings["smooth_len_input"]/settings["data_gap"]))
+    array_past = output_array.shift(time = tot_lead).dropna(dim="time")
+    array_fut = output_array[:, tot_lead:]
     return metrics.get_persist_errors(array_fut.to_numpy(), array_past.to_numpy(), error_type)
 
 #we change our data from having a member and time dimension, to just a sample dimension, since we aren't concerned with differentiating by member
@@ -316,14 +317,18 @@ def process_data(data_feature, data_target, settings, input_standard_dict, outpu
     data_input = add_extra_channel(data_feature, settings, extra_chan) 
     #if averaged_days is 0, then perform a running mean to smooth the input/output data
     if settings["averaged_days"] == 0:
-        data_input = smooth_data(data_input, settings["smooth_len_input"])
-        data_output = smooth_data(data_target, settings["smooth_len_output"])
+        if settings["smooth_len_input"] != 0:
+            data_input = smooth_data(data_input, settings["smooth_len_input"])
+        if settings["smooth_len_output"] != 0:
+            data_output = smooth_data(data_target, settings["smooth_len_output"])
+        else:
+            data_output = data_target
     #otherwise, smooth via downscaling (preserve more independence between samples) - this must be a multiple of the lead time (e.g. you cannot have weekly samples with a 8 day lead time
         # but you could with a 7, 14, or 21 day lead. )
     else:
         #this is more of a check to make sure we have the same dates for input/output, should be ok to remove
         data_input, data_target = xr.align(data_input, data_target, join="inner", exclude = ("lat","lon"))
-        t_avg = str(settings["averaged_days"]) + "D"
+        t_avg = str(settings["averaged_days"]) + "M"
         #here we shift forward the data and then remove the 1st time step to effectively compute a backward downsample (e.g. Jan 1 - Jan 7 data will all go to Jan 1, not all to Jan 7)
         data_input = data_input.resample(time = t_avg).mean().shift(time=1)
         data_input = data_input[:,1:]
@@ -335,6 +340,8 @@ def process_data(data_feature, data_target, settings, input_standard_dict, outpu
     #align our data, so all dates are lined up again before applying the lead time filter. This results in index i having data_input from lead time earlier than the data_output
     #this is used to filter out any years that don't have correspinding years in the input/output
     data_input_orig, data_output_orig = xr.align(data_input, data_output, join="inner", exclude = ("lat","lon")) 
+    data_input_orig = gap_data(data_input_orig, settings["data_gap"]) 
+    data_output_orig = gap_data(data_output_orig, settings["data_gap"])
     #get any tethers you want:
     tethers = []
     for idx, lead_amount in enumerate(settings["tethers"]):
@@ -353,8 +360,9 @@ def process_data(data_feature, data_target, settings, input_standard_dict, outpu
         data_input, data_output, tethers = filter_years(data_input, data_output, settings["years"], tethers)
     if settings["months"] != None:
         data_input, data_output,tethers = filter_months(data_input, data_output, settings["months"], tethers)
-    progressions, data_input, data_output = filter_progression_leads(data_input_orig, data_input, data_output, settings["progressions"])
+    #progressions, data_input, data_output = filter_progression_leads(data_input_orig, data_input, data_output, settings["progressions"])
     #Here we optionally standardize the data over all samples (i.e. standardize each grid point)
+    progressions = []
     data_input, input_standard_dict = standardize_data(data_input, input_standard_dict, settings["standardize_bool"])
     data_output, output_standard_dict = standardize_data(data_output, output_standard_dict,settings["standardize_bool"], settings["median"])
 
@@ -387,19 +395,14 @@ def filter_months(data_input, data_output, months, tethers = []):
     
 #add in shift of lead times between input and output
 def filter_lead_times(data_input, data_output, lead_time):
-    # Calculate target times based on lead_time
-    times = data_output.time + timedelta(days=-lead_time)
-    times2 = data_input.time + timedelta(days=lead_time)
+    # Drop the last lead_time data points in the time dimension for data_input
+    data_input_filtered = data_input.isel(time=slice(None, -lead_time))
     
-    # Filter data_input based on target times (dropping end times)
-    data_input = data_input.where(data_input.time.isin(times.values), drop=True)
-    
-    # Filter data_output based on target times (dropping beginning times)
-    data_output = data_output.where(data_output.time.isin(times2.values), drop=True)
-
+    # Drop the first lead_time data points in the time dimension for data_output
+    data_output_filtered = data_output.isel(time=slice(lead_time, None))
     
     # Return filtered data_input and data_output
-    return data_input, data_output
+    return data_input_filtered, data_output_filtered
 
 def filter_progression_leads(data_in_orig, data_input_filtered, data_output, progression_leads = []):
     progressions = []
@@ -433,22 +436,22 @@ def add_extra_channel(data_in, settings, extra_chan):
         return data_in
 
 #this keeps times the same, but I guess then if you use indices in the future it will work ok?????
-def create_input_output_shift(data_input, data_output, lead_time):
-    if lead_time == 0:
-        return data_input.copy(), data_output.copy()
-    else:
-        data_in = data_input[:, :-lead_time, :, :].copy() #this seems like it just shaves off times at the end
-        data_out = data_output[:, lead_time:,].copy() #this seems like it shaves off times at the front
-        return data_input, data_out
-
-#running mean to smooth data (either forward running mean for target data, or backward for feature data to ensure not using future data for prediction)
 def smooth_data(data, smooth_time): 
     if smooth_time<0:
-        data = (data.rolling(time=-smooth_time).mean(skipna=True)).shift(time = smooth_time + 1)
+        data = data.rolling(time=-smooth_time).mean(skipna=True)
+        data = data.shift(time = smooth_time + 1)
         data = data.dropna("time")
     elif smooth_time>0:
         data = data.rolling(time=smooth_time).mean(skipna=True)
         data = data.dropna("time")
+    
+    return data
+
+def gap_data(data, step): 
+    if step < 1:
+        raise ValueError("Step must be a positive integer")
+    # Select every x-th entry in the dataset
+    data = data.isel(time=slice(None, None, step))
     return data
 
 
@@ -488,16 +491,20 @@ def extract_region(data, region=None, lat=None, lon=None, mask_builder = 0, prog
         data_masked = data_masked[:, :, ilon, :]
         return data_masked, lat[ilat], lon[ilon]
 
-#given a variable, get the xarray data and add a member dimension, that we will use instead of time/member number later
-def get_netcdf(var, data_directory, settings, members = [], obs_fn = None, time_tendency = 0, new = ""):
+def get_netcdf(var, data_directory, settings, members = [], obs_fn = None, time_tendency = 0):
 
     da_all = None
 
     for ens in members:
         member_text = str(ens)
+        if member_text[0] == "s":
+            member_text =  "smbb.LE2-"+ member_text[1:]
+        if member_text[0] == "c":
+            member_text =  "CMIP6.LE2-"+ member_text[1:]
         print('   ensemble member = ' + member_text)
-        fp = dir_settings["net_data"] + "/" + var + "_global_1850-1949_ens" + member_text + "_dailyanom_detrend" + new + ".nc"
-        da = xr.open_dataset(fp)["__xarray_dataarray_variable__"].squeeze()
+        #fp = dir_settings["net_data"] + "/" + "Monthly_Temp/" + member_text + "." + var + ".1850-2100.shifted.nc" 
+        fp = dir_settings["net_data"] + "/" + "Detrended_" + var +"/" + member_text + "." + var + ".1850-2100.shifted.nc" 
+        da = xr.open_dataset(fp)[var].squeeze()
         da = da.fillna(0.0)
         if ens == "ERA5":
             da = da.convert_calendar("standard", use_cftime=True)
@@ -508,27 +515,23 @@ def get_netcdf(var, data_directory, settings, members = [], obs_fn = None, time_
             da_all = da.expand_dims(dim={"member": 1}, axis=0)
         else:
             da_all = xr.concat([da_all, da], dim="member")
-
-    # da_all, __, __ = extract_region(
-    #     data=da_all, region=regions.get_region_dict(
-    #         settings["feature_region_name"]
-    #     )
-    #)
+        gc.collect()
     return da_all
+#given a variable, get the xarray data and add a member dimension, that we will use instead of time/member number later
 
 #probably have to change the directories here but then it's just multiplication
 def mask_in_land_ocean(da, settings, maskin="land"):
     # if no land mask or ocean masks exists, run make_land_ocean_mask()
-    if not os.path.isfile(dir_settings["net_data"] + "MPI-ESM_ocean_mask.nc") or not os.path.isfile(dir_settings["data_directory"] + "MPI-ESM_land_mask.nc") or not os.path.isfile(dir_settings["data_directory"] + "MPI-ESM_no_mask.nc"):
+    if not os.path.isfile(dir_settings["net_data"] + "/month_ocean_mask.nc") or not os.path.isfile(dir_settings["net_data"]  + "/month_land_mask.nc") or not os.path.isfile(dir_settings["net_data"]  + "/month_no_mask.nc"):
         make_land_mask(settings)
     if maskin == "land":
-        with gzip.open(dir_settings["net_data"] + "MPI-ESM_land_mask.pickle", "rb") as fp:
+        with gzip.open(dir_settings["net_data"] + "/month_land_mask.pickle", "rb") as fp:
             mask = pickle.load(fp)
     elif maskin == "ocean":
-        with gzip.open(dir_settings["net_data"] + "MPI-ESM_ocean_mask.pickle", "rb") as fp:
+        with gzip.open(dir_settings["net_data"] + "/month_ocean_mask.pickle", "rb") as fp:
             mask = pickle.load(fp)
     elif maskin == "all":
-            with gzip.open(dir_settings["net_data"] + "MPI-ESM_no_mask.pickle", "rb") as fp:
+            with gzip.open(dir_settings["net_data"] + "/month_no_mask.pickle", "rb") as fp:
                 mask = pickle.load(fp)
     else:
         raise NotImplementedError("no such mask type.")
@@ -539,42 +542,41 @@ def mask_in_land_ocean(da, settings, maskin="land"):
 
 
 def make_land_mask(settings):
-    x_data = xr.load_dataset(dir_settings["net_data"] +
-                        "/SSS_global_1850-1949_ens5_dailyanom_detrend.nc",
-                        )["__xarray_dataarray_variable__"]
+    x_data = xr.load_dataset("/barnes-scratch/DATA/CESM2-LE/raw_data/monthly/tos/b.e21.BHISTcmip6.f09_g17.LE2-1001.001.cam.h0.SST.185001-185912.nc")["SST"]
     x_data = x_data.mean(dim="time", skipna=True)
     
     #x_ocean keeps ocean values, sets land to 0
     x_ocean = xr.where(x_data.isnull(), 0.0, 1.0)#replace where there aren't values with 0 (since it's a map of SSS, this implies those areas are land)
-    x_ocean.to_netcdf(dir_settings["net_data"] + "MPI-ESM_ocean_mask.nc")
+    x_ocean.to_netcdf(dir_settings["net_data"] + "month_ocean_mask.nc")
     x_ocean.plot()
 
     #x_land keeps land values, sets ocean to 1
     x_land = xr.where(x_data.isnull(), 1.0, 0.0)#replace where there aren't values with 1 (since it's a map of SSS, this implies it is land)
-    x_land.to_netcdf(dir_settings["net_data"] + "MPI-ESM_land_mask.nc")
+    x_land.to_netcdf(dir_settings["net_data"] + "month_land_mask.nc")
     x_land.plot()
 
     #x_all keeps land and ocean values
     x_all = x_land + x_ocean
-    x_all.to_netcdf(dir_settings["net_data"] + "MPI-ESM_no_mask.nc")
+    x_all.to_netcdf(dir_settings["net_data"] + "month_no_mask.nc")
     x_all.plot()
 
-    da = xr.load_dataarray(dir_settings["net_data"] + "MPI-ESM_land_mask.nc")
-    data_savename = dir_settings["net_data"] + "MPI-ESM_land_mask.pickle"
+    da = xr.load_dataarray(dir_settings["net_data"] + "month_land_mask.nc")
+    data_savename = dir_settings["net_data"] + "month_land_mask.pickle"
     with gzip.open(data_savename, "wb") as fp:
         pickle.dump(da.to_numpy().astype(np.float32), fp)
 
-    da = xr.load_dataarray(dir_settings["net_data"] + "MPI-ESM_no_mask.nc")
-    data_savename = dir_settings["net_data"] + "MPI-ESM_no_mask.pickle"
+    da = xr.load_dataarray(dir_settings["net_data"] + "month_no_mask.nc")
+    data_savename = dir_settings["net_data"] + "month_no_mask.pickle"
     with gzip.open(data_savename, "wb") as fp:
         pickle.dump(da.to_numpy().astype(np.float32), fp)
 
-    da = xr.load_dataarray(dir_settings["net_data"] + "MPI-ESM_ocean_mask.nc")
-    data_savename = dir_settings["net_data"] + "MPI-ESM_ocean_mask.pickle"
+    da = xr.load_dataarray(dir_settings["net_data"] + "month_ocean_mask.nc")
+    data_savename = dir_settings["net_data"] + "month_ocean_mask.pickle"
     with gzip.open(data_savename, "wb") as fp:
         pickle.dump(da.to_numpy().astype(np.float32), fp)
 
     return 1
+
 
 def standardize_data(data, standard_dict, standardize_bool, median=0):
     if type(standard_dict) == type(None):

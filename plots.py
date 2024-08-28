@@ -902,7 +902,7 @@ def get_shades(base_color, num_shades):
     base = np.array(colors.to_rgb(base_color))
     return [colors.to_hex(base * (1 - i / num_shades)) for i in range(num_shades)]
 
-def confidence_plot(analogue_vector, error_dictionary, settings):
+def confidence_plot(analogue_vector, error_dictionary, settings, error_climotol = None):
     plt.style.use("default")
     for analog_idx in range(1,len(analogue_vector)):
         fig, ax = plt.subplots(figsize=(12, 6))
@@ -927,7 +927,10 @@ def confidence_plot(analogue_vector, error_dictionary, settings):
                     y_subset_x = y_sorted_by_x[:cutoff_index]
                     y_means_x.append(np.mean(y_subset_x))
                 label_name =  label_name = f"{mask_type_name}: {confidence_name}"
-                plt.plot(percentages, 100*(1-np.array(y_means_x)), linestyle=line_type, linewidth = 4, color=shades[i], label=label_name, alpha = .8)
+                if type(error_climotol) == type(None):
+                    plt.plot(percentages, 100*(1-np.array(y_means_x)), linestyle=line_type, linewidth = 4, color=shades[i], label=label_name, alpha = .8)
+                else:
+                    plt.plot(percentages, 100*(1-np.array(y_means_x)/np.mean(np.array(error_climotol))), linestyle=line_type, linewidth = 4, color=shades[i], label=label_name, alpha = .8)
         plt.xlabel('Percent Most Confident', fontsize=14)
         plt.ylabel('Percent Accuracy', fontsize=14)
         plt.title('Discard Plot for Prediction Spread (' + str(analogue_vector[analog_idx]) + " analogs)", fontsize=16)

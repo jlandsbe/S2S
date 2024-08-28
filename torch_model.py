@@ -40,7 +40,7 @@ def prepare_device(device="gpu"):
         raise NotImplementedError
 
 class CustomDataset(torch.utils.data.Dataset):
-    def __init__(self, analog_input, soi_input, analog_output, soi_output, validation_soi_indices = None, validation_analog_indices = None, rng_seed=33):
+    def __init__(self, analog_input, soi_input, analog_output, soi_output, tether_analogs=[], tether_soi=[], validation_soi_indices = None, validation_analog_indices = None, rng_seed=33):
         #assert len(soi_input) == len(soi_output), "Lengths of SOI arrays must be the same"
         #assert len(analog_input) == len(analog_output), "Lengths of analog arrays must be the same"
         self.validation_soi_indices = validation_soi_indices
@@ -49,6 +49,11 @@ class CustomDataset(torch.utils.data.Dataset):
         self.analog_input = torch.tensor(analog_input, dtype=torch.float32)
         self.soi_output = torch.tensor(soi_output, dtype=torch.float32)
         self.analog_output = torch.tensor(analog_output, dtype=torch.float32)
+        self.analog_tethers = torch.tensor(tether_analogs, dtype=torch.float32)
+        self.soi_tethers = torch.tensor(tether_soi, dtype=torch.float32)
+        if tether_analogs != [] and tether_soi!=[]:
+            self.analog_all_tethers = torch.cat((self.analog_output.unsqueeze(0), self.analog_tethers), dim=0)
+            self.soi_all_tethers = torch.cat((self.soi_output.unsqueeze(0), self.soi_tethers), dim=0)
         torch.manual_seed(rng_seed)
         
     def __len__(self):
@@ -62,7 +67,11 @@ class CustomDataset(torch.utils.data.Dataset):
         else:
             analog_idx = int(torch.randint(0, len(self.analog_input), (1,)).item())
             soi_idx = int(torch.randint(0, len(self.soi_input), (1,)).item())
-        return self.soi_input[soi_idx], self.analog_input[analog_idx], torch.mean((self.soi_output[soi_idx] - self.analog_output[analog_idx])**2)
+        if self.analog_tethers.shape[0] > 0:
+            err = torch.mean((self.soi_all_tethers[:,soi_idx] - self.analog_all_tethers[:,analog_idx]**2))
+        else:
+            err = torch.mean((self.soi_output[soi_idx] - self.analog_output[analog_idx])**2)
+        return self.soi_input[soi_idx], self.analog_input[analog_idx], err
     
 class TorchModel_base(nn.Module):
     def __init__(self, settings, input_dim1):

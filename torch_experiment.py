@@ -7,7 +7,8 @@ import random
 from pprint import pprint
 import tensorflow as tf
 import silence_tensorflow.auto
-import build_data
+
+
 #import build_model
 import experiments
 from save_load_model_run import save_model_run
@@ -159,9 +160,12 @@ def train_experiments(
     settings_overwrite = None
 ):
     for exp_name in exp_name_list:
-        
         settings = experiments.get_experiment(exp_name, base_exp_name=base_exp_name,
                                               settings_overwrite=settings_overwrite)
+        if settings["monthly_data"]:
+            import build_data_monthly as build_data
+        else:
+            import build_data
 
         print('-- TRAINING ' + settings["exp_name"] + ' --')
             
@@ -180,8 +184,11 @@ def train_experiments(
             lon,
             persist_err,
             analog_dates,
-            soi_dates
+            soi_dates, tether_analogs, tether_soi, progression_analogs, progression_soi
         ) = build_data.build_data(settings, data_directory)
+        if settings["tethers"]==[]:
+            tether_analogs = []
+            tether_soi = []
         if settings["preprocess"]:
             print("Preprocessing completed")
         else:
@@ -231,8 +238,8 @@ def train_experiments(
                         #     settings, [analog_input])
                         pass
                     elif settings["model_type"] == "interp_model" and not settings["presaved_mask"]:
-                        trainset = CustomDataset(analog_input, soi_train_input, analog_output, soi_train_output)
-                        valset = CustomDataset(analog_input, soi_val_input, analog_output, soi_val_output, np.random.randint(0, len(soi_val_input), size=min(settings["max_iterations"], len(analog_input))), np.random.randint(0, len(analog_input), size=min(settings["max_iterations"], len(analog_input))))
+                        trainset = CustomDataset(analog_input, soi_train_input, analog_output, soi_train_output, tether_analogs, tether_soi)
+                        valset = CustomDataset(analog_input, soi_val_input, analog_output, soi_val_output, tether_analogs, tether_soi, np.random.randint(0, len(soi_val_input), size=min(settings["max_iterations"], len(analog_input))), np.random.randint(0, len(analog_input), size=min(settings["max_iterations"], len(analog_input))))
                         train_loader = DataLoader(
                         trainset,
                         batch_size=settings["batch_size"],
@@ -351,7 +358,7 @@ def train_experiments(
                     # PLOT MODEL EVALUATION METRICS
                     if settings["gates"]:
                         metrics_dict = model_diagnostics_torch.visualize_metrics(settings, model, soi_test_input, soi_test_output,
-                                                                        analog_input, analog_output, lat,
+                                                                        analog_input, analog_output, np.array(progression_analogs), np.array(progression_soi), lat,
                                                                         lon, weights_val, persist_err,
                                                                         n_testing_soi=int(soi_test_input.shape[0]*settings["percent_soi"]),
                                                                         n_testing_analogs=int(analog_input.shape[0]*settings["percent_analog"]),
@@ -360,7 +367,7 @@ def train_experiments(
                                                                         fig_savename="subset_skill_score_vs_nanalogues", gates=gates)
                     else:
                         metrics_dict = model_diagnostics_torch.visualize_metrics(settings, model, soi_test_input, soi_test_output,
-                                                                        analog_input, analog_output, lat,
+                                                                        analog_input, analog_output, np.array(progression_analogs), np.array(progression_soi), lat,
                                                                         lon, weights_val, persist_err,
                                                                         n_testing_soi=int(soi_test_input.shape[0]*settings["percent_soi"]),
                                                                         n_testing_analogs=int(analog_input.shape[0]*settings["percent_analog"]),

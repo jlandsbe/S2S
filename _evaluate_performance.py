@@ -48,7 +48,7 @@ if __name__ == "__main__":
             input_standard_dict,
             output_standard_dict,
             lat,
-            lon, persist_err, __, __
+            lon, persist_err, __, __, __
         ) = build_data.build_data(settings, dir_settings["data_directory"])
 
         for rng_seed in settings["rng_seed_list"]:
