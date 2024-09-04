@@ -16,6 +16,7 @@ import warnings
 from shapely.errors import ShapelyDeprecationWarning
 import matplotlib.animation as animation
 import scipy.stats
+import random
 warnings.filterwarnings(action='ignore', message='Mean of empty slice')
 warnings.filterwarnings(action='ignore', message='All-NaN slice encountered')
 warnings.filterwarnings("ignore", category=ShapelyDeprecationWarning)
@@ -322,6 +323,149 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                                                                     chunksize=soi_input.shape[0]//n_processes,))
 
                     else:
+
+                        random.seed(21)
+                        length_of_soi_output = len(soi_output)
+                        random_index = random.randint(0, length_of_soi_output - 1)
+                        random_soi_output = soi_output[random_index]
+                        random_soi_input = soi_input[random_index]
+
+                        mimse = np.mean((random_soi_input * mask - analog_input * mask) ** 2, axis=(1, 2, 3))
+                        i_analogs = np.argsort(mimse, axis=0)[:8]
+                        selected_analogs = analog_input[i_analogs]
+                        selected_analogs_output = analog_output[i_analogs]
+
+                        # Create a 3x3 figure for the subplots
+                        plt.style.use("default")
+                        fig, axs = plt.subplots(3, 3, figsize=(12, 8))
+                        fig.tight_layout()
+                        soi_val = str(round(random_soi_output, 2))
+
+                        # First plot: random_soi_input
+                        ax1, climits = plots.plot_interp_masks(
+                            fig=fig,
+                            settings=settings,
+                            weights_train=np.squeeze(random_soi_input),
+                            lat=lat,
+                            lon=lon,
+                            title_text=f"Truth: {soi_val}",
+                            subplot=(3, 3, 1),
+                            use_text=0,
+                            cbarBool=False  # Disable individual colorbars
+                        )
+
+                        predicted_val = str(round(np.mean(selected_analogs_output), 2))
+
+                        # Subsequent plots: selected_analogs
+                        for i in range(8):
+                            title_val = str(round(selected_analogs_output[i], 2))
+                            ax, _ = plots.plot_interp_masks(
+                                fig=fig,
+                                settings=settings,
+                                weights_train=np.squeeze(selected_analogs[i]),
+                                lat=lat,
+                                lon=lon,
+                                title_text=f"Predicts: {title_val}",
+                                subplot=(3, 3, i + 2),
+                                use_text=0,
+                                cbarBool=False  # Disable individual colorbars
+                            )
+
+                        # Turn off all spines for each subplot
+                        for ax in axs.flat:
+                            ax.spines['top'].set_visible(False)
+                            ax.spines['bottom'].set_visible(False)
+                            ax.spines['left'].set_visible(False)
+                            ax.spines['right'].set_visible(False)
+
+                        # Add a single colorbar for the entire figure
+                        cbar = fig.colorbar(
+                            plt.cm.ScalarMappable(cmap=plots.get_mycolormap(), norm=plt.Normalize(vmin=climits[0], vmax=climits[1])),
+                            ax=axs,  # Reference to the entire grid of subplots
+                            orientation='horizontal',  # Choose 'horizontal' or 'vertical'
+                            fraction=0.02,  # Fraction of the plot occupied by the colorbar
+                            pad=0.1  # Padding between the plot and colorbar
+                        )
+
+
+                        for ax in axs.flat:  # Iterate over each subplot (axes)
+                            ax.spines['top'].set_visible(False)
+                            ax.spines['bottom'].set_visible(False)
+                            ax.spines['left'].set_visible(False)
+                            ax.spines['right'].set_visible(False)
+
+                        # Optionally, hide the ticks as well
+                            ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+                        fig.text(0.5, 0.99, f"Predicted Value: {predicted_val}", ha='center',fontweight='bold')
+                        # Save the figure
+                        fig.savefig(dir_settings["figure_directory"] + settings["savename_prefix"] + '_example.png', dpi=dpiFig, bbox_inches='tight')
+                    
+                        
+
+                                                # Create a 3x3 figure for the subplots
+                        plt.style.use("default")
+                        fig, axs = plt.subplots(3, 3, figsize=(12, 8))
+                        fig.tight_layout()
+                        soi_val = str(round(random_soi_output, 2))
+
+                        # First plot: random_soi_input
+                        ax1, climits = plots.plot_interp_masks(
+                            fig=fig,
+                            settings=settings,
+                            weights_train=np.squeeze(random_soi_input)*np.squeeze(mask),
+                            lat=lat,
+                            lon=lon,
+                            title_text=f"Truth: {soi_val}",
+                            subplot=(3, 3, 1),
+                            use_text=0,
+                            cbarBool=False  # Disable individual colorbars
+                        )
+
+                        predicted_val = str(round(np.mean(selected_analogs_output), 2))
+
+                        # Subsequent plots: selected_analogs
+                        for i in range(8):
+                            title_val = str(round(selected_analogs_output[i], 2))
+                            ax, _ = plots.plot_interp_masks(
+                                fig=fig,
+                                settings=settings,
+                                weights_train=np.squeeze(selected_analogs[i])*np.squeeze(mask),
+                                lat=lat,
+                                lon=lon,
+                                title_text=f"Predicts: {title_val}",
+                                subplot=(3, 3, i + 2),
+                                use_text=0,
+                                cbarBool=False  # Disable individual colorbars
+                            )
+
+                        # Turn off all spines for each subplot
+                        for ax in axs.flat:
+                            ax.spines['top'].set_visible(False)
+                            ax.spines['bottom'].set_visible(False)
+                            ax.spines['left'].set_visible(False)
+                            ax.spines['right'].set_visible(False)
+
+                        # Add a single colorbar for the entire figure
+                        cbar = fig.colorbar(
+                            plt.cm.ScalarMappable(cmap=plots.get_mycolormap(), norm=plt.Normalize(vmin=climits[0], vmax=climits[1])),
+                            ax=axs,  # Reference to the entire grid of subplots
+                            orientation='horizontal',  # Choose 'horizontal' or 'vertical'
+                            fraction=0.02,  # Fraction of the plot occupied by the colorbar
+                            pad=0.1  # Padding between the plot and colorbar
+                        )
+
+
+                        for ax in axs.flat:  # Iterate over each subplot (axes)
+                            ax.spines['top'].set_visible(False)
+                            ax.spines['bottom'].set_visible(False)
+                            ax.spines['left'].set_visible(False)
+                            ax.spines['right'].set_visible(False)
+
+                        # Optionally, hide the ticks as well
+                            ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+                        fig.text(0.5, 0.99, f"Predicted Value: {predicted_val}", ha='center',fontweight='bold')
+                        # Save the figure
+                        fig.savefig(dir_settings["figure_directory"] + settings["savename_prefix"] + '_example_masked.png', dpi=dpiFig, bbox_inches='tight')
                         net_err = np.array(run_complex_operations(metrics.mse_operation,
                                                                     soi_iterable_instance,
                                                                     pool,
@@ -329,6 +473,14 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                         error_network[:, :] = net_err[:,0,:]
                         analog_match_error = net_err[:,1,:] 
                         prediction_spread = net_err[:,2,:]
+
+
+
+
+
+
+
+
 
                     print("finished network error")
     # -----------------------

@@ -425,8 +425,9 @@ def plot_state_masks(fig, settings, weights_train, lat, lon, region_bool=True, c
         return ax, climits
 def plot_interp_masks(fig, settings, weights_train, lat, lon, region_bool=True, climits=None, central_longitude=215.,
                       title_text=None, subplot=(1, 1, 1), cmap=None, use_text=True, edgecolor="turquoise", 
-                      cbarBool=True):
+                      cbarBool=True, style = "seaborn-v0_8"):
 #here weights_train is of shape lat x lon
+    plt.style.use(style)
     if cmap is None:
         cmap = get_mycolormap()
 

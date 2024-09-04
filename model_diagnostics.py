@@ -576,6 +576,8 @@ def video_syn_data(settings, weights_train_list, lat, lon, sv=""):
     ani.save(output_file, writer='imagemagick')
     plt.tight_layout()
 
+
+
 def visualize_interp_model(settings, weights_train, lat, lon, sv="", clims =(0,0), ttl=""):
     #expects shape of lat x lon x channels
     num_maps = weights_train.shape[-1]

@@ -260,15 +260,18 @@ def process_input_output(data_directory, settings, input_standard_dict=None,
 
 
     (data_input, data_output, input_standard_dict, output_standard_dict, tethers, progressions) = process_data(data_feature, data_output, settings, input_standard_dict, output_standard_dict, extra_channel)
-    persist_err = np.mean(compute_persistance(data_output, settings["lead_time"], settings["error_calc"]))
+    persist_err = np.mean(compute_persistance(data_output, settings, settings["lead_time"], settings["error_calc"]))
 
     gc.collect()
     return data_input, data_output, input_standard_dict, output_standard_dict, persist_err, tethers, progressions
 
-def compute_persistance(output_array, leadtime, error_type = "mse"):
-    array_past = output_array.shift(time = leadtime).dropna(dim="time")
-    array_fut = output_array[:, leadtime:]
+
+def compute_persistance(output_array, settings, leadtime, error_type = "mse"):
+    tot_lead = leadtime + int((settings["smooth_len_input"]/settings["data_gap"]))
+    array_past = output_array.shift(time = tot_lead).dropna(dim="time")
+    array_fut = output_array[:, tot_lead:]
     return metrics.get_persist_errors(array_fut.to_numpy(), array_past.to_numpy(), error_type)
+
 
 #we change our data from having a member and time dimension, to just a sample dimension, since we aren't concerned with differentiating by member
 def stack_to_samples(data_input, data_output, scalar_mode, no_inputs = 0, no_outputs = 0):

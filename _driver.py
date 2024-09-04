@@ -14,7 +14,7 @@ __author__ = "Jamin K. Rader, Elizabeth A. Barnes, and Randal J. Barnes"
 __version__ = "30 March 2023"
 
 # List of experiments to run
-EXP_NAME_LIST = ("tristate_monthly_1month_lead_winter",)
+EXP_NAME_LIST = ("nao_monthly_2month_lead_obs",)
 if __name__ == "__main__":
 
     start_time = time.time()

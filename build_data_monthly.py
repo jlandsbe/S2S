@@ -504,7 +504,11 @@ def get_netcdf(var, data_directory, settings, members = [], obs_fn = None, time_
         print('   ensemble member = ' + member_text)
         #fp = dir_settings["net_data"] + "/" + "Monthly_Temp/" + member_text + "." + var + ".1850-2100.shifted.nc" 
         fp = dir_settings["net_data"] + "/" + "Detrended_" + var +"/" + member_text + "." + var + ".1850-2100.shifted.nc" 
-        da = xr.open_dataset(fp)[var].squeeze()
+        if ens == "ERA5":
+            da = xr.open_dataset(fp)['__xarray_dataarray_variable__'].squeeze()
+            da = da.convert_calendar("standard", use_cftime=True)
+        else:
+            da = xr.open_dataset(fp)[var].squeeze()
         da = da.fillna(0.0)
         if ens == "ERA5":
             da = da.convert_calendar("standard", use_cftime=True)
