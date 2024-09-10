@@ -930,10 +930,11 @@ def confidence_plot(analogue_vector, error_dictionary, settings, error_climotol 
                 label_name =  label_name = f"{mask_type_name}: {confidence_name}"
                 if type(error_climotol) == type(None):
                     plt.plot(percentages, 100*(1-np.array(y_means_x)), linestyle=line_type, linewidth = 4, color=shades[i], label=label_name, alpha = .8)
+                    plt.ylabel('Percent Accuracy', fontsize=14)
                 else:
-                    plt.plot(percentages, 100*(1-np.array(y_means_x)/np.mean(np.array(error_climotol))), linestyle=line_type, linewidth = 4, color=shades[i], label=label_name, alpha = .8)
+                    plt.plot(percentages, np.array(y_means_x), linestyle=line_type, linewidth = 4, color=shades[i], label=label_name, alpha = .8)
+                    plt.ylabel('Error', fontsize=14)
         plt.xlabel('Percent Most Confident', fontsize=14)
-        plt.ylabel('Percent Accuracy', fontsize=14)
         plt.title('Discard Plot for Prediction Spread (' + str(analogue_vector[analog_idx]) + " analogs)", fontsize=16)
         ax.legend(loc="upper left")
         ax = plt.gca()

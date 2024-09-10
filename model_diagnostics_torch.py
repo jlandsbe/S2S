@@ -323,7 +323,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                                                                     chunksize=soi_input.shape[0]//n_processes,))
 
                     else:
-
+                        
                         random.seed(21)
                         length_of_soi_output = len(soi_output)
                         random_index = random.randint(0, length_of_soi_output - 1)
@@ -331,47 +331,107 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                         random_soi_input = soi_input[random_index]
 
                         mimse = np.mean((random_soi_input * mask - analog_input * mask) ** 2, axis=(1, 2, 3))
+                        i_analogs_histogram = np.argsort(mimse, axis=0)[:30]
+                        selected_analogs_histogram = analog_output[i_analogs_histogram]
+                        if len(np.shape(selected_analogs_histogram)) > 1:
+                            selected_analogs_histogram = np.mean(selected_analogs_histogram, axis=(1,2))
+                        # Step 2: Set up histogram parameters (customize as needed)
+                        num_bins = 10  # Example number of bins
+                        hist_range = (np.min(selected_analogs_histogram), np.max(selected_analogs_histogram))  # Range of histogram
+                        hist_color = 'deepskyblue'  # Color of the histogram bars
+                        hist_label = 'Analog Outputs'  # Label for the histogram
+
+                        # Step 3: Create the histogram
+                        plt.figure(figsize=(10, 6))  # Create a new figure for the histogram
+                        plt.hist(selected_analogs_histogram, bins=num_bins, range=hist_range, color=hist_color, label=hist_label)
+                        # Plot a vertical line at the value of random_soi_output
+                        plt.axvline(x=random_soi_output, color='tomato', linestyle='--', linewidth=2, label='Truth')
+                        plt.title('Histogram of Selected Analog Outputs')  # Step 4: Label the histogram
+                        plt.xlabel('Output Value (sigma)')
+                        plt.ylabel('Frequency')
+
+                        # Step 5: Save the histogram
+                        histogram_filename = dir_settings["figure_directory"] + settings["savename_prefix"] + '_histogram.png'
+                        plt.savefig(histogram_filename, dpi=100, bbox_inches='tight')  # Save the figure
+                        plt.close()  # Close the figure to prevent it from displaying in the notebook or script output
                         i_analogs = np.argsort(mimse, axis=0)[:8]
                         selected_analogs = analog_input[i_analogs]
                         selected_analogs_output = analog_output[i_analogs]
 
                         # Create a 3x3 figure for the subplots
                         plt.style.use("default")
-                        fig, axs = plt.subplots(3, 3, figsize=(12, 8))
-                        fig.tight_layout()
-                        soi_val = str(round(random_soi_output, 2))
+                        if random_soi_input.shape[-1] != 1:
+                            fig, axs = plt.subplots(3, 6, figsize=(24, 12))
+                            fig.tight_layout()
+                            soi_val = str(round(random_soi_output, 2))
+                            # First plot: random_soi_input
+                            for k in range(2):
+                                ax1, climits = plots.plot_interp_masks(
+                                    fig=fig,
+                                    settings=settings,
+                                    weights_train=np.squeeze(random_soi_input[:,:,k]),
+                                    lat=lat,
+                                    lon=lon,
+                                    title_text=f"Truth: {soi_val}",
+                                    subplot=(3, 6, k+1),
+                                    use_text=0,
+                                    cbarBool=False  # Disable individual colorbars
+                                )
 
-                        # First plot: random_soi_input
-                        ax1, climits = plots.plot_interp_masks(
-                            fig=fig,
-                            settings=settings,
-                            weights_train=np.squeeze(random_soi_input),
-                            lat=lat,
-                            lon=lon,
-                            title_text=f"Truth: {soi_val}",
-                            subplot=(3, 3, 1),
-                            use_text=0,
-                            cbarBool=False  # Disable individual colorbars
-                        )
+                            predicted_val = str(round(np.mean(selected_analogs_output), 2))
 
-                        predicted_val = str(round(np.mean(selected_analogs_output), 2))
+                            # Subsequent plots: selected_analogs
+                            for i in range(8):
+                                for j in range(2):
+                                    title_val = str(round(selected_analogs_output[i], 2))
+                                    ax, _ = plots.plot_interp_masks(
+                                        fig=fig,
+                                        settings=settings,
+                                        weights_train=np.squeeze(selected_analogs[i,:,:,j]),
+                                        lat=lat,
+                                        lon=lon,
+                                        title_text=f"Predicts: {title_val}",
+                                        subplot=(3, 6, 2*i + j + 3),
+                                        use_text=0,
+                                        cbarBool=False  # Disable individual colorbars
+                                    )
 
-                        # Subsequent plots: selected_analogs
-                        for i in range(8):
-                            title_val = str(round(selected_analogs_output[i], 2))
-                            ax, _ = plots.plot_interp_masks(
+                        else:
+                            fig, axs = plt.subplots(3, 3, figsize=(12, 8))
+                            fig.tight_layout()
+                            soi_val = str(round(random_soi_output, 2))
+                            # First plot: random_soi_input
+                            ax1, climits = plots.plot_interp_masks(
                                 fig=fig,
                                 settings=settings,
-                                weights_train=np.squeeze(selected_analogs[i]),
+                                weights_train=np.squeeze(random_soi_input),
                                 lat=lat,
                                 lon=lon,
-                                title_text=f"Predicts: {title_val}",
-                                subplot=(3, 3, i + 2),
+                                title_text=f"Truth: {soi_val}",
+                                subplot=(3, 3, 1),
                                 use_text=0,
                                 cbarBool=False  # Disable individual colorbars
                             )
 
-                        # Turn off all spines for each subplot
+                            predicted_val = str(round(np.mean(selected_analogs_output), 2))
+
+                            # Subsequent plots: selected_analogs
+                            for i in range(8):
+                                title_val = str(round(selected_analogs_output[i], 2))
+                                ax, _ = plots.plot_interp_masks(
+                                    fig=fig,
+                                    settings=settings,
+                                    weights_train=np.squeeze(selected_analogs[i]),
+                                    lat=lat,
+                                    lon=lon,
+                                    title_text=f"Predicts: {title_val}",
+                                    subplot=(3, 3, i + 2),
+                                    use_text=0,
+                                    cbarBool=False)  # Disable individual colorbars
+                                
+                    
+                        
+                                                # Turn off all spines for each subplot
                         for ax in axs.flat:
                             ax.spines['top'].set_visible(False)
                             ax.spines['bottom'].set_visible(False)
@@ -399,44 +459,79 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                         fig.text(0.5, 0.99, f"Predicted Value: {predicted_val}", ha='center',fontweight='bold')
                         # Save the figure
                         fig.savefig(dir_settings["figure_directory"] + settings["savename_prefix"] + '_example.png', dpi=dpiFig, bbox_inches='tight')
-                    
-                        
 
-                                                # Create a 3x3 figure for the subplots
-                        plt.style.use("default")
-                        fig, axs = plt.subplots(3, 3, figsize=(12, 8))
-                        fig.tight_layout()
-                        soi_val = str(round(random_soi_output, 2))
+                        if random_soi_input.shape[-1] != 1:
+                            plt.style.use("default")
+                            fig, axs = plt.subplots(3, 6, figsize=(24, 12))
+                            fig.tight_layout()
+                            soi_val = str(round(random_soi_output, 2))
+                            # First plot: random_soi_input
+                            for k in range(2):
+                                ax1, climits = plots.plot_interp_masks(
+                                    fig=fig,
+                                    settings=settings,
+                                    weights_train=np.squeeze(random_soi_input[:,:,k])*np.squeeze(mask[:,:,k]),
+                                    lat=lat,
+                                    lon=lon,
+                                    title_text=f"Truth: {soi_val}",
+                                    subplot=(3, 6, k+1),
+                                    use_text=0,
+                                    cbarBool=False  # Disable individual colorbars
+                                )
 
-                        # First plot: random_soi_input
-                        ax1, climits = plots.plot_interp_masks(
-                            fig=fig,
-                            settings=settings,
-                            weights_train=np.squeeze(random_soi_input)*np.squeeze(mask),
-                            lat=lat,
-                            lon=lon,
-                            title_text=f"Truth: {soi_val}",
-                            subplot=(3, 3, 1),
-                            use_text=0,
-                            cbarBool=False  # Disable individual colorbars
-                        )
+                            predicted_val = str(round(np.mean(selected_analogs_output), 2))
 
-                        predicted_val = str(round(np.mean(selected_analogs_output), 2))
+                            # Subsequent plots: selected_analogs
+                            for i in range(8):
+                                for j in range(2):
+                                    title_val = str(round(selected_analogs_output[i], 2))
+                                    ax, _ = plots.plot_interp_masks(
+                                        fig=fig,
+                                        settings=settings,
+                                        weights_train=np.squeeze(selected_analogs[i,:,:,j])*np.squeeze(mask[:,:,j]),
+                                        lat=lat,
+                                        lon=lon,
+                                        title_text=f"Predicts: {title_val}",
+                                        subplot=(3, 6, 2*i + j + 3),
+                                        use_text=0,
+                                        cbarBool=False  # Disable individual colorbars
+                                    )
 
-                        # Subsequent plots: selected_analogs
-                        for i in range(8):
-                            title_val = str(round(selected_analogs_output[i], 2))
-                            ax, _ = plots.plot_interp_masks(
+                        else:
+                            plt.style.use("default")
+                            fig, axs = plt.subplots(3, 3, figsize=(12, 8))
+                            fig.tight_layout()
+                            soi_val = str(round(random_soi_output, 2))
+
+                            # First plot: random_soi_input
+                            ax1, climits = plots.plot_interp_masks(
                                 fig=fig,
                                 settings=settings,
-                                weights_train=np.squeeze(selected_analogs[i])*np.squeeze(mask),
+                                weights_train=np.squeeze(random_soi_input)*np.squeeze(mask),
                                 lat=lat,
                                 lon=lon,
-                                title_text=f"Predicts: {title_val}",
-                                subplot=(3, 3, i + 2),
+                                title_text=f"Truth: {soi_val}",
+                                subplot=(3, 3, 1),
                                 use_text=0,
                                 cbarBool=False  # Disable individual colorbars
                             )
+
+                            predicted_val = str(round(np.mean(selected_analogs_output), 2))
+
+                            # Subsequent plots: selected_analogs
+                            for i in range(8):
+                                title_val = str(round(selected_analogs_output[i], 2))
+                                ax, _ = plots.plot_interp_masks(
+                                    fig=fig,
+                                    settings=settings,
+                                    weights_train=np.squeeze(selected_analogs[i])*np.squeeze(mask),
+                                    lat=lat,
+                                    lon=lon,
+                                    title_text=f"Predicts: {title_val}",
+                                    subplot=(3, 3, i + 2),
+                                    use_text=0,
+                                    cbarBool=False  # Disable individual colorbars
+                                )
 
                         # Turn off all spines for each subplot
                         for ax in axs.flat:
@@ -473,6 +568,8 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                         error_network[:, :] = net_err[:,0,:]
                         analog_match_error = net_err[:,1,:] 
                         prediction_spread = net_err[:,2,:]
+                        prediction_IQR = net_err[:,3,:]
+                        prediction_range = net_err[:,4,:]
 
 
 
@@ -581,6 +678,8 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
             error_globalcorr[:, :] = glob_err[:,0,:]
             global_analog_match_error = glob_err[:,1,:] 
             global_prediction_spread = glob_err[:,2,:]
+            global_IQR = glob_err[:,3,:]
+            global_range = glob_err[:,4,:]
         print("finished global error")
     # -----------------------
     # Simple TARGET REGION correlation baseline
@@ -641,6 +740,8 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
             error_corr[:, :] = error_corr_reg[:,0,:]
             regional_analog_match_error = error_corr_reg[:,1,:] 
             regional_prediction_spread = error_corr_reg[:,2,:]
+            regional_IQR = error_corr_reg[:,3,:]
+            regional_range = error_corr_reg[:,4,:]
         print("finished target region error")
         
     # -----------------------
@@ -698,6 +799,8 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                 error_customcorr[:, :] = cust_err[:,0,:]
                 NH_analog_match_error = cust_err[:,1,:] 
                 NH_prediction_spread = cust_err[:,2,:]
+                NH_IQR = cust_err[:,3,:]
+                NH_range = cust_err[:,4,:]
     
     # -----------------------
     # Custom baseline (e.g. mean evolution)
@@ -752,10 +855,10 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
         random_confidence_dict = {}
         climatol = None
     else:
-        network_confidence_dict = {"Analog Match": analog_match_error, "Prediction Spread": prediction_spread}
-        global_confidence_dict = {"Analog Match": global_analog_match_error, "Prediction Spread": global_prediction_spread}
+        network_confidence_dict = {"Analog Match": analog_match_error, "Prediction Spread": prediction_spread, "Prediction IQR": prediction_IQR, "Prediction Range": prediction_range}
+        global_confidence_dict = {"Analog Match": global_analog_match_error, "Prediction Spread": global_prediction_spread, "Prediction IQR": global_IQR, "Prediction Range": global_range}
         NH_cofidence_dict = {"Analog Match": NH_analog_match_error, "Prediction Spread": NH_prediction_spread}
-        regional_cofidence_dict = {"Analog Match": regional_analog_match_error, "Prediction Spread": regional_prediction_spread}
+        regional_cofidence_dict = {"Analog Match": regional_analog_match_error, "Prediction Spread": regional_prediction_spread, "Prediction IQR": regional_IQR, "Prediction Range": regional_range}
         random_confidence_dict = {"Prediction Spread": random_output_spread.T}
         climatol = error_climo
     
