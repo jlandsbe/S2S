@@ -108,6 +108,11 @@ def get_region_dict(region=None):
             "lat_range":[39., 45.],
             "lon_range":[360-80.5, 360-72.],
           },
+
+          "midwest" :{          
+                "lat_range":[36., 49.],
+                "lon_range":[254., 270.],
+             },
           }
 
     if region is None:

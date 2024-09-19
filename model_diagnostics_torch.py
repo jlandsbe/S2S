@@ -29,6 +29,8 @@ dir_settings = base_directories.get_directories()
 dpiFig = 300
 
 
+
+
 def visualize_metrics(settings, model, soi_input, soi_output, analog_input, analog_output, progression_analogs, progression_soi,
                       lat, lon, mask, persist_err=0, n_testing_analogs=1_000, n_testing_soi=1_000,
                       analogue_vector=None, fig_savename="", analog_dates = None, soi_dates = None,
@@ -71,7 +73,7 @@ def visualize_metrics(settings, model, soi_input, soi_output, analog_input, anal
 
 
 def run_complex_operations(operation, inputs, pool, chunksize):
-    return pool.map(operation, inputs, chunksize=chunksize)
+    return pool.imap(operation, inputs, chunksize=chunksize)
 
 
 def soi_iterable(n_analogs, soi_input, soi_output, analog_input, analog_output, mask, uncertainties = 0, val_soi_output=None, val_analog_output=None, progression_analog=[], progression_soi=[],gates = None):
@@ -151,13 +153,149 @@ def soi_iterable_masks(n_analogs, soi_input, soi_output, analog_input, analog_ou
         yield inputs
 
 
+import matplotlib.pyplot as plt
+import numpy as np
+import random
+
+def plot_histogram(selected_analogs_histogram, random_soi_output, dir_settings, settings, regional_analogs_histogram = None, all_analogs_histogram = None):
+    plt.style.use("default")
+    # Step 2: Set up histogram parameters (customize as needed)
+    num_bins = 10  # Example number of bins
+    hist_range = (np.min(selected_analogs_histogram), np.max(selected_analogs_histogram))  # Range of histogram
+    hist_color = 'deepskyblue'  # Color of the histogram bars
+    hist_label = 'Analog Outputs'  # Label for the histogram
+
+    # Step 3: Create the histogram
+    plt.figure(figsize=(10, 6))  # Create a new figure for the histogram
+    if type(all_analogs_histogram)!=type(None):
+        plt.hist(all_analogs_histogram, bins=num_bins, range=hist_range, color='moccasin', label='All Analog Outputs', alpha = .5, density=True)
+    if type(regional_analogs_histogram)!=type(None):
+        plt.hist(regional_analogs_histogram, bins=num_bins, range=hist_range, color='orchid', label='Regional Analog Outputs', alpha = 1, density=True, histtype='step', linewidth=8) 
+    plt.hist(selected_analogs_histogram, bins=num_bins, range=hist_range, color=hist_color, label=hist_label, alpha =1, density=True,histtype='step', linewidth=8)
+    # Plot a vertical line at the value of random_soi_output
+    plt.axvline(x=random_soi_output, color='tomato', linestyle='--', linewidth=2, label='Truth')
+    plt.title('Histogram of Selected Analog Outputs')  # Step 4: Label the histogram
+    plt.xlabel('Output Value (sigma)')
+    plt.ylabel('Frequency')
+    plt.legend()  # Add a legend to the plot
+        # Remove top and right spines
+    ax = plt.gca()
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+
+    # Step 5: Save the histogram
+    histogram_filename = dir_settings["figure_directory"] + settings["savename_prefix"] + '_histogram.png'
+    plt.savefig(histogram_filename, dpi=100, bbox_inches='tight')  # Save the figure
+    plt.close()  # Close the figure to prevent it from displaying in the notebook or script output
+
+def create_subplots(random_soi_input, random_soi_output, selected_analogs, selected_analogs_output, mask, settings, lat, lon, dir_settings, filename_suffix):
+    plt.style.use("default")
+    if random_soi_input.shape[-1] != 1:
+        fig, axs = plt.subplots(3, 6, figsize=(24, 12))
+        fig.tight_layout()
+        soi_val = str(round(random_soi_output, 2))
+        # First plot: random_soi_input
+        for k in range(2):
+            ax1, climits = plots.plot_interp_masks(
+                fig=fig,
+                settings=settings,
+                weights_train=np.squeeze(random_soi_input[:,:,k]),
+                lat=lat,
+                lon=lon,
+                title_text=f"Truth: {soi_val}",
+                subplot=(3, 6, k+1),
+                use_text=0,
+                cbarBool=False  # Disable individual colorbars
+            )
+
+        predicted_val = str(round(np.mean(selected_analogs_output), 2))
+
+        # Subsequent plots: selected_analogs
+        for i in range(8):
+            for j in range(2):
+                title_val = str(round(selected_analogs_output[i], 2))
+                ax, _ = plots.plot_interp_masks(
+                    fig=fig,
+                    settings=settings,
+                    weights_train=np.squeeze(selected_analogs[i,:,:,j]),
+                    lat=lat,
+                    lon=lon,
+                    title_text=f"Predicts: {title_val}",
+                    subplot=(3, 6, 2*i + j + 3),
+                    use_text=0,
+                    cbarBool=False  # Disable individual colorbars
+                )
+    else:
+        fig, axs = plt.subplots(3, 3, figsize=(12, 8))
+        fig.tight_layout()
+        soi_val = str(round(random_soi_output, 2))
+        # First plot: random_soi_input
+        ax1, climits = plots.plot_interp_masks(
+            fig=fig,
+            settings=settings,
+            weights_train=np.squeeze(random_soi_input),
+            lat=lat,
+            lon=lon,
+            title_text=f"Truth: {soi_val}",
+            subplot=(3, 3, 1),
+            use_text=0,
+            cbarBool=False  # Disable individual colorbars
+        )
+
+        predicted_val = str(round(np.mean(selected_analogs_output), 2))
+
+        # Subsequent plots: selected_analogs
+        for i in range(8):
+            title_val = str(round(selected_analogs_output[i], 2))
+            ax, _ = plots.plot_interp_masks(
+                fig=fig,
+                settings=settings,
+                weights_train=np.squeeze(selected_analogs[i]),
+                lat=lat,
+                lon=lon,
+                title_text=f"Predicts: {title_val}",
+                subplot=(3, 3, i + 2),
+                use_text=0,
+                cbarBool=False  # Disable individual colorbars
+            )
+
+    # Turn off all spines for each subplot
+    for ax in axs.flat:
+        ax.spines['top'].set_visible(False)
+        ax.spines['bottom'].set_visible(False)
+        ax.spines['left'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+
+    # Add a single colorbar for the entire figure
+    cbar = fig.colorbar(
+        plt.cm.ScalarMappable(cmap=plots.get_mycolormap(), norm=plt.Normalize(vmin=climits[0], vmax=climits[1])),
+        ax=axs,  # Reference to the entire grid of subplots
+        orientation='horizontal',  # Choose 'horizontal' or 'vertical'
+        fraction=0.02,  # Fraction of the plot occupied by the colorbar
+        pad=0.1  # Padding between the plot and colorbar
+    )
+
+    for ax in axs.flat:  # Iterate over each subplot (axes)
+        ax.spines['top'].set_visible(False)
+        ax.spines['bottom'].set_visible(False)
+        ax.spines['left'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+
+    fig.text(0.5, 0.99, f"Predicted Value: {predicted_val}", ha='center', fontweight='bold')
+    # Save the figure
+    fig.savefig(dir_settings["figure_directory"] + settings["savename_prefix"] + filename_suffix, dpi=dpiFig, bbox_inches='tight')
+    plt.close()
+
+
+
 def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                    analog_output, progression_analog, progression_soi, lat, lon,
                    mask, persist_err=0,
                    soi_train_output=None,
                    analogue_vector=[1, 2, 5, 10, 15, 20, 25, 30],
                    show_figure=False, save_figure=True, fig_savename="", my_masks=None, gates = None, analog_dates = None, soi_dates = None):
-    
+    ignore_baselines = 1
     if settings["median"]:
         soi_output = 1.0*(soi_output > 0)
         analog_output = 1.0*(analog_output > 0)
@@ -324,247 +462,13 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
 
                     else:
                         
-                        random.seed(21)
-                        length_of_soi_output = len(soi_output)
-                        random_index = random.randint(0, length_of_soi_output - 1)
-                        random_soi_output = soi_output[random_index]
-                        random_soi_input = soi_input[random_index]
-
-                        mimse = np.mean((random_soi_input * mask - analog_input * mask) ** 2, axis=(1, 2, 3))
-                        i_analogs_histogram = np.argsort(mimse, axis=0)[:30]
-                        selected_analogs_histogram = analog_output[i_analogs_histogram]
-                        if len(np.shape(selected_analogs_histogram)) > 1:
-                            selected_analogs_histogram = np.mean(selected_analogs_histogram, axis=(1,2))
-                        # Step 2: Set up histogram parameters (customize as needed)
-                        num_bins = 10  # Example number of bins
-                        hist_range = (np.min(selected_analogs_histogram), np.max(selected_analogs_histogram))  # Range of histogram
-                        hist_color = 'deepskyblue'  # Color of the histogram bars
-                        hist_label = 'Analog Outputs'  # Label for the histogram
-
-                        # Step 3: Create the histogram
-                        plt.figure(figsize=(10, 6))  # Create a new figure for the histogram
-                        plt.hist(selected_analogs_histogram, bins=num_bins, range=hist_range, color=hist_color, label=hist_label)
-                        # Plot a vertical line at the value of random_soi_output
-                        plt.axvline(x=random_soi_output, color='tomato', linestyle='--', linewidth=2, label='Truth')
-                        plt.title('Histogram of Selected Analog Outputs')  # Step 4: Label the histogram
-                        plt.xlabel('Output Value (sigma)')
-                        plt.ylabel('Frequency')
-
-                        # Step 5: Save the histogram
-                        histogram_filename = dir_settings["figure_directory"] + settings["savename_prefix"] + '_histogram.png'
-                        plt.savefig(histogram_filename, dpi=100, bbox_inches='tight')  # Save the figure
-                        plt.close()  # Close the figure to prevent it from displaying in the notebook or script output
-                        i_analogs = np.argsort(mimse, axis=0)[:8]
-                        selected_analogs = analog_input[i_analogs]
-                        selected_analogs_output = analog_output[i_analogs]
-
-                        # Create a 3x3 figure for the subplots
-                        plt.style.use("default")
-                        if random_soi_input.shape[-1] != 1:
-                            fig, axs = plt.subplots(3, 6, figsize=(24, 12))
-                            fig.tight_layout()
-                            soi_val = str(round(random_soi_output, 2))
-                            # First plot: random_soi_input
-                            for k in range(2):
-                                ax1, climits = plots.plot_interp_masks(
-                                    fig=fig,
-                                    settings=settings,
-                                    weights_train=np.squeeze(random_soi_input[:,:,k]),
-                                    lat=lat,
-                                    lon=lon,
-                                    title_text=f"Truth: {soi_val}",
-                                    subplot=(3, 6, k+1),
-                                    use_text=0,
-                                    cbarBool=False  # Disable individual colorbars
-                                )
-
-                            predicted_val = str(round(np.mean(selected_analogs_output), 2))
-
-                            # Subsequent plots: selected_analogs
-                            for i in range(8):
-                                for j in range(2):
-                                    title_val = str(round(selected_analogs_output[i], 2))
-                                    ax, _ = plots.plot_interp_masks(
-                                        fig=fig,
-                                        settings=settings,
-                                        weights_train=np.squeeze(selected_analogs[i,:,:,j]),
-                                        lat=lat,
-                                        lon=lon,
-                                        title_text=f"Predicts: {title_val}",
-                                        subplot=(3, 6, 2*i + j + 3),
-                                        use_text=0,
-                                        cbarBool=False  # Disable individual colorbars
-                                    )
-
-                        else:
-                            fig, axs = plt.subplots(3, 3, figsize=(12, 8))
-                            fig.tight_layout()
-                            soi_val = str(round(random_soi_output, 2))
-                            # First plot: random_soi_input
-                            ax1, climits = plots.plot_interp_masks(
-                                fig=fig,
-                                settings=settings,
-                                weights_train=np.squeeze(random_soi_input),
-                                lat=lat,
-                                lon=lon,
-                                title_text=f"Truth: {soi_val}",
-                                subplot=(3, 3, 1),
-                                use_text=0,
-                                cbarBool=False  # Disable individual colorbars
-                            )
-
-                            predicted_val = str(round(np.mean(selected_analogs_output), 2))
-
-                            # Subsequent plots: selected_analogs
-                            for i in range(8):
-                                title_val = str(round(selected_analogs_output[i], 2))
-                                ax, _ = plots.plot_interp_masks(
-                                    fig=fig,
-                                    settings=settings,
-                                    weights_train=np.squeeze(selected_analogs[i]),
-                                    lat=lat,
-                                    lon=lon,
-                                    title_text=f"Predicts: {title_val}",
-                                    subplot=(3, 3, i + 2),
-                                    use_text=0,
-                                    cbarBool=False)  # Disable individual colorbars
-                                
-                    
-                        
-                                                # Turn off all spines for each subplot
-                        for ax in axs.flat:
-                            ax.spines['top'].set_visible(False)
-                            ax.spines['bottom'].set_visible(False)
-                            ax.spines['left'].set_visible(False)
-                            ax.spines['right'].set_visible(False)
-
-                        # Add a single colorbar for the entire figure
-                        cbar = fig.colorbar(
-                            plt.cm.ScalarMappable(cmap=plots.get_mycolormap(), norm=plt.Normalize(vmin=climits[0], vmax=climits[1])),
-                            ax=axs,  # Reference to the entire grid of subplots
-                            orientation='horizontal',  # Choose 'horizontal' or 'vertical'
-                            fraction=0.02,  # Fraction of the plot occupied by the colorbar
-                            pad=0.1  # Padding between the plot and colorbar
-                        )
-
-
-                        for ax in axs.flat:  # Iterate over each subplot (axes)
-                            ax.spines['top'].set_visible(False)
-                            ax.spines['bottom'].set_visible(False)
-                            ax.spines['left'].set_visible(False)
-                            ax.spines['right'].set_visible(False)
-
-                        # Optionally, hide the ticks as well
-                            ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
-                        fig.text(0.5, 0.99, f"Predicted Value: {predicted_val}", ha='center',fontweight='bold')
-                        # Save the figure
-                        fig.savefig(dir_settings["figure_directory"] + settings["savename_prefix"] + '_example.png', dpi=dpiFig, bbox_inches='tight')
-
-                        if random_soi_input.shape[-1] != 1:
-                            plt.style.use("default")
-                            fig, axs = plt.subplots(3, 6, figsize=(24, 12))
-                            fig.tight_layout()
-                            soi_val = str(round(random_soi_output, 2))
-                            # First plot: random_soi_input
-                            for k in range(2):
-                                ax1, climits = plots.plot_interp_masks(
-                                    fig=fig,
-                                    settings=settings,
-                                    weights_train=np.squeeze(random_soi_input[:,:,k])*np.squeeze(mask[:,:,k]),
-                                    lat=lat,
-                                    lon=lon,
-                                    title_text=f"Truth: {soi_val}",
-                                    subplot=(3, 6, k+1),
-                                    use_text=0,
-                                    cbarBool=False  # Disable individual colorbars
-                                )
-
-                            predicted_val = str(round(np.mean(selected_analogs_output), 2))
-
-                            # Subsequent plots: selected_analogs
-                            for i in range(8):
-                                for j in range(2):
-                                    title_val = str(round(selected_analogs_output[i], 2))
-                                    ax, _ = plots.plot_interp_masks(
-                                        fig=fig,
-                                        settings=settings,
-                                        weights_train=np.squeeze(selected_analogs[i,:,:,j])*np.squeeze(mask[:,:,j]),
-                                        lat=lat,
-                                        lon=lon,
-                                        title_text=f"Predicts: {title_val}",
-                                        subplot=(3, 6, 2*i + j + 3),
-                                        use_text=0,
-                                        cbarBool=False  # Disable individual colorbars
-                                    )
-
-                        else:
-                            plt.style.use("default")
-                            fig, axs = plt.subplots(3, 3, figsize=(12, 8))
-                            fig.tight_layout()
-                            soi_val = str(round(random_soi_output, 2))
-
-                            # First plot: random_soi_input
-                            ax1, climits = plots.plot_interp_masks(
-                                fig=fig,
-                                settings=settings,
-                                weights_train=np.squeeze(random_soi_input)*np.squeeze(mask),
-                                lat=lat,
-                                lon=lon,
-                                title_text=f"Truth: {soi_val}",
-                                subplot=(3, 3, 1),
-                                use_text=0,
-                                cbarBool=False  # Disable individual colorbars
-                            )
-
-                            predicted_val = str(round(np.mean(selected_analogs_output), 2))
-
-                            # Subsequent plots: selected_analogs
-                            for i in range(8):
-                                title_val = str(round(selected_analogs_output[i], 2))
-                                ax, _ = plots.plot_interp_masks(
-                                    fig=fig,
-                                    settings=settings,
-                                    weights_train=np.squeeze(selected_analogs[i])*np.squeeze(mask),
-                                    lat=lat,
-                                    lon=lon,
-                                    title_text=f"Predicts: {title_val}",
-                                    subplot=(3, 3, i + 2),
-                                    use_text=0,
-                                    cbarBool=False  # Disable individual colorbars
-                                )
-
-                        # Turn off all spines for each subplot
-                        for ax in axs.flat:
-                            ax.spines['top'].set_visible(False)
-                            ax.spines['bottom'].set_visible(False)
-                            ax.spines['left'].set_visible(False)
-                            ax.spines['right'].set_visible(False)
-
-                        # Add a single colorbar for the entire figure
-                        cbar = fig.colorbar(
-                            plt.cm.ScalarMappable(cmap=plots.get_mycolormap(), norm=plt.Normalize(vmin=climits[0], vmax=climits[1])),
-                            ax=axs,  # Reference to the entire grid of subplots
-                            orientation='horizontal',  # Choose 'horizontal' or 'vertical'
-                            fraction=0.02,  # Fraction of the plot occupied by the colorbar
-                            pad=0.1  # Padding between the plot and colorbar
-                        )
-
-
-                        for ax in axs.flat:  # Iterate over each subplot (axes)
-                            ax.spines['top'].set_visible(False)
-                            ax.spines['bottom'].set_visible(False)
-                            ax.spines['left'].set_visible(False)
-                            ax.spines['right'].set_visible(False)
-
-                        # Optionally, hide the ticks as well
-                            ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
-                        fig.text(0.5, 0.99, f"Predicted Value: {predicted_val}", ha='center',fontweight='bold')
-                        # Save the figure
-                        fig.savefig(dir_settings["figure_directory"] + settings["savename_prefix"] + '_example_masked.png', dpi=dpiFig, bbox_inches='tight')
-                        net_err = np.array(run_complex_operations(metrics.mse_operation,
+                        net_err = []
+                        for result in run_complex_operations(metrics.mse_operation,
                                                                     soi_iterable_instance,
                                                                     pool,
-                                                                    chunksize=soi_input.shape[0]//n_processes,))
+                                                                    chunksize=5):
+                            net_err.append(result)
+                        net_err = np.array(net_err)
                         error_network[:, :] = net_err[:,0,:]
                         analog_match_error = net_err[:,1,:] 
                         prediction_spread = net_err[:,2,:]
@@ -627,60 +531,61 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
 
     # -----------------------
     # Simple GLOBAL correlation baseline
-    with Pool(n_processes) as pool:
-        sqrt_area_weights = np.sqrt(np.abs(np.cos(np.deg2rad(lat)))[np.newaxis, :, np.newaxis, np.newaxis])
-        if settings["median"] or settings["error_calc"]=="mse"or settings["percentiles"]!=None:
-            soi_iterable_instance = soi_iterable(n_analogues,
-                                            soi_input,
-                                            soi_output,
-                                            analog_input,
-                                            analog_output,
-                                            sqrt_area_weights, uncertainties=1, val_analog_output=analog_output_val, val_soi_output=soi_output_val, progression_analog=progression_analog, progression_soi=progression_soi)
-        else:
-            soi_iterable_instance = soi_iterable(n_analogues,
-                                            soi_input,
-                                            soi_output,
-                                            analog_input,
-                                            analog_output,
-                                            sqrt_area_weights, progression_analog=progression_analog, progression_soi=progression_soi)
-        if settings["median"] or settings["percentiles"]!=None:
-            glob_err = np.array(run_complex_operations(metrics.super_classification_operation,
-                                                            soi_iterable_instance,
-                                                            pool,
-                                                            chunksize=soi_input.shape[0]//n_processes,))
-            error_globalcorr[:, :] = glob_err[:,0,:]
-            global_analog_match_error = glob_err[:,1,:] 
-            global_prediction_spread = glob_err[:,2,:]
-            global_modal_fraction = glob_err[:,3,:]
-            global_entropy_spread = glob_err[:,4,:]
-            
-        elif settings["error_calc"] == "classify":
-            error_globalcorr[:, :] = run_complex_operations(metrics.classification_operation,
-                                                            soi_iterable_instance,
-                                                            pool,
-                                                            chunksize=soi_input.shape[0]//n_processes,)
-        elif settings["error_calc"] == "map":
-                #number of analogs x time x lat x lon
-                error_globalcorr = run_complex_operations(metrics.map_operation,
-                                                            soi_iterable_instance,
-                                                            pool,
-                                                            chunksize=soi_input.shape[0]//n_processes,)
-        elif settings["error_calc"] == "field":
-            error_globalcorr[:, :] = run_complex_operations(metrics.field_operation,
-                                                            soi_iterable_instance,
-                                                            pool,
-                                                            chunksize=soi_input.shape[0]//n_processes,)
-        else:
-            glob_err = np.array(run_complex_operations(metrics.mse_operation,
-                                                                    soi_iterable_instance,
-                                                                    pool,
-                                                                    chunksize=soi_input.shape[0]//n_processes,))
-            error_globalcorr[:, :] = glob_err[:,0,:]
-            global_analog_match_error = glob_err[:,1,:] 
-            global_prediction_spread = glob_err[:,2,:]
-            global_IQR = glob_err[:,3,:]
-            global_range = glob_err[:,4,:]
-        print("finished global error")
+    if not ignore_baselines:
+        with Pool(n_processes) as pool:
+            sqrt_area_weights = np.sqrt(np.abs(np.cos(np.deg2rad(lat)))[np.newaxis, :, np.newaxis, np.newaxis])
+            if settings["median"] or settings["error_calc"]=="mse"or settings["percentiles"]!=None:
+                soi_iterable_instance = soi_iterable(n_analogues,
+                                                soi_input,
+                                                soi_output,
+                                                analog_input,
+                                                analog_output,
+                                                sqrt_area_weights, uncertainties=1, val_analog_output=analog_output_val, val_soi_output=soi_output_val, progression_analog=progression_analog, progression_soi=progression_soi)
+            else:
+                soi_iterable_instance = soi_iterable(n_analogues,
+                                                soi_input,
+                                                soi_output,
+                                                analog_input,
+                                                analog_output,
+                                                sqrt_area_weights, progression_analog=progression_analog, progression_soi=progression_soi)
+            if settings["median"] or settings["percentiles"]!=None:
+                glob_err = np.array(run_complex_operations(metrics.super_classification_operation,
+                                                                soi_iterable_instance,
+                                                                pool,
+                                                                chunksize=soi_input.shape[0]//n_processes,))
+                error_globalcorr[:, :] = glob_err[:,0,:]
+                global_analog_match_error = glob_err[:,1,:] 
+                global_prediction_spread = glob_err[:,2,:]
+                global_modal_fraction = glob_err[:,3,:]
+                global_entropy_spread = glob_err[:,4,:]
+                
+            elif settings["error_calc"] == "classify":
+                error_globalcorr[:, :] = run_complex_operations(metrics.classification_operation,
+                                                                soi_iterable_instance,
+                                                                pool,
+                                                                chunksize=soi_input.shape[0]//n_processes,)
+            elif settings["error_calc"] == "map":
+                    #number of analogs x time x lat x lon
+                    error_globalcorr = run_complex_operations(metrics.map_operation,
+                                                                soi_iterable_instance,
+                                                                pool,
+                                                                chunksize=soi_input.shape[0]//n_processes,)
+            elif settings["error_calc"] == "field":
+                error_globalcorr[:, :] = run_complex_operations(metrics.field_operation,
+                                                                soi_iterable_instance,
+                                                                pool,
+                                                                chunksize=soi_input.shape[0]//n_processes,)
+            else:
+                glob_err = np.array(run_complex_operations(metrics.mse_operation,
+                                                                        soi_iterable_instance,
+                                                                        pool,
+                                                                        chunksize=soi_input.shape[0]//n_processes,))
+                error_globalcorr[:, :] = glob_err[:,0,:]
+                global_analog_match_error = glob_err[:,1,:] 
+                global_prediction_spread = glob_err[:,2,:]
+                global_IQR = glob_err[:,3,:]
+                global_range = glob_err[:,4,:]
+            print("finished global error")
     # -----------------------
     # Simple TARGET REGION correlation baseline
     with Pool(n_processes) as pool:
@@ -733,10 +638,13 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                                                             pool,
                                                             chunksize=soi_input.shape[0]//n_processes,)
         else:
-            error_corr_reg = np.array(run_complex_operations(metrics.mse_operation,
+            error_corr_reg = []
+            for result in run_complex_operations(metrics.mse_operation,
                                                             soi_iterable_instance,
                                                             pool,
-                                                            chunksize=soi_input.shape[0]//n_processes,))
+                                                            chunksize=soi_input.shape[0]//n_processes,):
+                error_corr_reg.append(result)
+            error_corr_reg = np.array(error_corr_reg)
             error_corr[:, :] = error_corr_reg[:,0,:]
             regional_analog_match_error = error_corr_reg[:,1,:] 
             regional_prediction_spread = error_corr_reg[:,2,:]
@@ -746,7 +654,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
         
     # -----------------------
     # Simple CUSTOM CORRELATION REGION correlation baseline (not needed)
-    if "correlation_region_name" in settings.keys():
+    if not ignore_baselines and "correlation_region_name" in settings.keys():
         with Pool(n_processes) as pool:
             cust_reg_map = np.zeros(np.shape(mask))
             cust_reg_map = build_data.extract_region(cust_reg_map, regions.get_region_dict(settings["correlation_region_name"]), lat=lat, lon=lon, mask_builder = 1)
@@ -804,7 +712,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
     
     # -----------------------
     # Custom baseline (e.g. mean evolution)
-    if "custom_baseline" in settings.keys():
+    if "custom_baseline" in settings.keys() and not ignore_baselines:
         custom_true, custom_pred = metrics.calc_custom_baseline(settings["custom_baseline"], 
                                                                 soi_output=soi_output,
                                                                 soi_train_output=soi_train_output,
@@ -813,23 +721,24 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
 
     # -----------------------
     # Random baseline
-    random_output_spread = np.zeros((len_analogues, soi_input.shape[0])) * np.nan
-    for idx_analog, n_analog in enumerate(n_analogues):
-        i_analogue = rng.choice(np.arange(0, analog_output.shape[0]),
-                                size=(n_analog, soi_output.shape[0]), replace=True)
-        if settings["median"] or settings["percentiles"]!=None:
-            error_random[idx_analog, :] = np.mean((soi_output!=(scipy.stats.mode(analog_output[i_analogue], axis=0)).mode))
-            
-        elif settings["error_calc"] == "map":
-            np.append(error_random,metrics.get_analog_errors(soi_output,
-                                                    np.median(analog_output[i_analogue], axis=0), settings["error_calc"]))
-        else: 
-            error_random[idx_analog, :] = metrics.get_analog_errors(soi_output,
-                                                    np.mean(analog_output[i_analogue], axis=0), settings["error_calc"])
-            if len(np.shape(analog_output)) > 2:
-                random_output_spread[idx_analog,:] = (np.mean(np.var(analog_output[i_analogue],axis=0), axis=(-1,-2)))
-            else:
-                random_output_spread[idx_analog,:] = (np.var(analog_output[i_analogue], axis=0))
+    if not ignore_baselines:
+        random_output_spread = np.zeros((len_analogues, soi_input.shape[0])) * np.nan
+        for idx_analog, n_analog in enumerate(n_analogues):
+            i_analogue = rng.choice(np.arange(0, analog_output.shape[0]),
+                                    size=(n_analog, soi_output.shape[0]), replace=True)
+            if settings["median"] or settings["percentiles"]!=None:
+                error_random[idx_analog, :] = np.mean((soi_output!=(scipy.stats.mode(analog_output[i_analogue], axis=0)).mode))
+                
+            elif settings["error_calc"] == "map":
+                np.append(error_random,metrics.get_analog_errors(soi_output,
+                                                        np.median(analog_output[i_analogue], axis=0), settings["error_calc"]))
+            else: 
+                error_random[idx_analog, :] = metrics.get_analog_errors(soi_output,
+                                                        np.mean(analog_output[i_analogue], axis=0), settings["error_calc"])
+                if len(np.shape(analog_output)) > 2:
+                    random_output_spread[idx_analog,:] = (np.mean(np.var(analog_output[i_analogue],axis=0), axis=(-1,-2)))
+                else:
+                    random_output_spread[idx_analog,:] = (np.var(analog_output[i_analogue], axis=0))
 
 
     # plots.uncertainty_whiskers(analogue_vector, error_network, analog_match_error, prediction_spread, settings, 
@@ -838,12 +747,52 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
 
     # -----------------------
     # Climatology
-    if settings['median'] or settings["percentiles"]!=None:
+    if settings['median'] or settings["percentiles"]!=None or ignore_baselines:
         error_climo = np.repeat(np.array([1]), len_analogues)
     elif settings["error_calc"] == "map":
         error_climo = metrics.get_analog_errors(soi_output, np.mean(analog_output, axis=0), settings["error_calc"])
     else:
         error_climo[:] = metrics.get_analog_errors(soi_output, np.mean(analog_output, axis=0), settings["error_calc"]).T
+
+
+# -----------------------
+    # Case Study Plots
+    # Main script
+    
+    num_ans_hist = 30
+    random.seed(21)
+    length_of_soi_output = len(soi_output)
+    random_index = random.randint(0, length_of_soi_output - 1)
+    random_soi_output = soi_output[random_index]
+    random_soi_input = soi_input[random_index]
+
+    #find n closest matches' outputs based on mask
+    mimse_mask = np.mean((random_soi_input * mask - analog_input * mask) ** 2, axis=(1, 2, 3))
+    i_analogs_histogram_mask = np.argsort(mimse_mask, axis=0)[:num_ans_hist]
+    selected_analogs_histogram_mask = analog_output[i_analogs_histogram_mask]
+    #find n closest matches' outputs based on regional mask
+    hist_soi_reg, lat_reg, lon_reg = build_data.extract_region(random_soi_input[np.newaxis, :], regions.get_region_dict(
+            settings["target_region_name"]), lat=lat, lon=lon)
+    mimse_regional = np.mean((hist_soi_reg - analog_reg) ** 2, axis=(1, 2, 3)) #here anlog_reg was defined earlier to be the regionally masked analogs
+    i_analogs_histogram_regional = np.argsort(mimse_regional, axis=0)[:num_ans_hist]
+    selected_analogs_histogram_regional = analog_output[i_analogs_histogram_regional]
+    #all possible analog outputs
+    selected_analogs_histogram_all = analog_output
+    if len(np.shape(selected_analogs_histogram_mask)) > 1:
+        selected_analogs_histogram_mask = np.mean(selected_analogs_histogram_mask, axis=(1, 2))
+        selected_analogs_histogram_regional = np.mean(selected_analogs_histogram_regional, axis=(1, 2))
+        selected_analogs_histogram_all = np.mean(selected_analogs_histogram_all, axis=(1, 2))
+    # Plot and save histogram
+    plot_histogram(selected_analogs_histogram_mask, random_soi_output, dir_settings, settings, selected_analogs_histogram_regional,selected_analogs_histogram_all)
+
+    i_analogs = np.argsort(mimse_mask, axis=0)[:8]
+    selected_analogs = analog_input[i_analogs]
+    selected_analogs_output = analog_output[i_analogs]
+
+    # Create and save subplots
+    create_subplots(random_soi_input, random_soi_output, selected_analogs, selected_analogs_output, mask, settings, lat, lon, dir_settings, '_example.png')
+    create_subplots(random_soi_input * mask, random_soi_output, selected_analogs * mask, selected_analogs_output, mask, settings, lat, lon, dir_settings, '_example_masked.png')
+
 
 # -----------------------
     #Confidence Plots
@@ -854,13 +803,21 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
         regional_cofidence_dict = {"Analog Match": regional_analog_match_error, "Prediction Spread": regional_prediction_spread, "Modal Fraction":regional_modal_fraction,"Entropy":regional_entropy_spread}
         random_confidence_dict = {}
         climatol = None
-    else:
+    elif not ignore_baselines:
         network_confidence_dict = {"Analog Match": analog_match_error, "Prediction Spread": prediction_spread, "Prediction IQR": prediction_IQR, "Prediction Range": prediction_range}
         global_confidence_dict = {"Analog Match": global_analog_match_error, "Prediction Spread": global_prediction_spread, "Prediction IQR": global_IQR, "Prediction Range": global_range}
         NH_cofidence_dict = {"Analog Match": NH_analog_match_error, "Prediction Spread": NH_prediction_spread}
         regional_cofidence_dict = {"Analog Match": regional_analog_match_error, "Prediction Spread": regional_prediction_spread, "Prediction IQR": regional_IQR, "Prediction Range": regional_range}
         random_confidence_dict = {"Prediction Spread": random_output_spread.T}
         climatol = error_climo
+    else:
+        network_confidence_dict = {"Analog Match": analog_match_error, "Prediction Spread": prediction_spread, "Prediction IQR": prediction_IQR, "Prediction Range": prediction_range}
+        global_confidence_dict = {}
+        NH_cofidence_dict = {}
+        regional_cofidence_dict = {"Analog Match": regional_analog_match_error, "Prediction Spread": regional_prediction_spread, "Prediction IQR": regional_IQR, "Prediction Range": regional_range}
+        random_confidence_dict = {}
+        climatol = error_climo
+
     
     #drop global for now:
     #global_confidence_dict={}
@@ -884,7 +841,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
 
         # -----------------------
     # Max Skill
-    if len(np.shape(soi_output)) > 1:
+    if len(np.shape(soi_output)) > 1 and ignore_baselines == False:
         error_maxskill = np.zeros((len_analogues, soi_input.shape[0])).T * np.nan
         with Pool(n_processes) as pool:
             no_weights = np.ones(np.shape(soi_output[:,:,:,np.newaxis])[1:])
@@ -934,9 +891,15 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
     # Dims should be num_analogs x num_samples
         error_network = error_network.T
         error_corr = error_corr.T
-        error_customcorr = error_customcorr.T
-        error_globalcorr = error_globalcorr.T
-        error_maxskill = error_maxskill.T
+        if ignore_baselines:
+            error_customcorr = np.ones((len_analogues, soi_input.shape[0])) * np.nan
+            error_globalcorr = np.ones((len_analogues, soi_input.shape[0])) * np.nan
+            error_maxskill = np.zeros((len_analogues, soi_input.shape[0])) * np.nan
+            error_random = np.zeros((len_analogues, soi_input.shape[0])) * np.nan
+        else:
+            error_customcorr = error_customcorr.T
+            error_globalcorr = error_globalcorr.T
+            error_maxskill = error_maxskill.T
 
 
     # -------------------------------------------
