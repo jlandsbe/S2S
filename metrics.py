@@ -98,8 +98,12 @@ def classification_operation(inputs):
     return np.stack(results, axis=0)
 
 def mse_operation(inputs):
-    assert type(inputs["n_analogs"]) is not int # should be a list-type
-    i_analogs = compute_best_analogs(inputs, inputs["max_analogs"])
+    if not isinstance(inputs["n_analogs"], list):
+        raise ValueError("'n_analogs' should be a list.")
+    if type(inputs["best_analogs"]) == type(None):
+        i_analogs = compute_best_analogs(inputs, inputs["max_analogs"])
+    else:
+        i_analogs = inputs["best_analogs"]
     results = []
     if inputs["uncertainties"]:
         input_diff = []
@@ -112,7 +116,14 @@ def mse_operation(inputs):
             output_spread.append(np.mean(np.var(inputs["analog_output"][i_analogs[:n_analogs]],axis=0)))
             output_IQR.append(np.subtract(*np.percentile(inputs["analog_output"][i_analogs[:n_analogs]], [75, 25], axis=0)))
             output_range.append(np.ptp(inputs["analog_output"][i_analogs[:n_analogs]], axis=0))
-        return np.stack(results, axis=0), np.stack(input_diff, axis=0), np.stack(output_spread, axis=0), np.stack(output_IQR, axis=0), np.stack(output_range, axis=0)
+            # If current n_analogs is max_analogs, set flag to return i_analogs
+
+        return (np.stack(results, axis=0), 
+                np.stack(input_diff, axis=0), 
+                np.stack(output_spread, axis=0), 
+                np.stack(output_IQR, axis=0), 
+                np.stack(output_range, axis=0),
+                i_analogs) 
     else:
         for n_analogs in inputs["n_analogs"]:
             results.append(get_analog_errors(inputs["soi_output_sample"], np.mean(inputs["analog_output"][i_analogs[:n_analogs]]), "mse"))

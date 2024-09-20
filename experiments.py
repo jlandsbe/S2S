@@ -862,7 +862,7 @@ experiments = {
         "preprocess": 0,
         "mask_only": 0,
         "presaved_mask": 1,
-        "percent_soi": .02,
+        "percent_soi": .05,
         "percent_analog": .05,
         "max_iterations": 10000,
         "date_info": 0,

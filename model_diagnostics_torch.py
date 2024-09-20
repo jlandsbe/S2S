@@ -17,6 +17,7 @@ from shapely.errors import ShapelyDeprecationWarning
 import matplotlib.animation as animation
 import scipy.stats
 import random
+import pickle
 warnings.filterwarnings(action='ignore', message='Mean of empty slice')
 warnings.filterwarnings(action='ignore', message='All-NaN slice encountered')
 warnings.filterwarnings("ignore", category=ShapelyDeprecationWarning)
@@ -76,7 +77,7 @@ def run_complex_operations(operation, inputs, pool, chunksize):
     return pool.imap(operation, inputs, chunksize=chunksize)
 
 
-def soi_iterable(n_analogs, soi_input, soi_output, analog_input, analog_output, mask, uncertainties = 0, val_soi_output=None, val_analog_output=None, progression_analog=[], progression_soi=[],gates = None):
+def soi_iterable(n_analogs, soi_input, soi_output, analog_input, analog_output, mask, best_analogs, uncertainties = 0, val_soi_output=None, val_analog_output=None, progression_analog=[], progression_soi=[],gates = None):
     """
     Create an iterable for a parallel approach to metric assessment
     """
@@ -99,6 +100,7 @@ def soi_iterable(n_analogs, soi_input, soi_output, analog_input, analog_output, 
                     "val_analog_output": val_analog_output,
                     "progression_soi": progression_soi[:,i_soi,:,:,:],
                     "progression_analog": progression_analog,
+                    "best_analogs": best_analogs if best_analogs is None else best_analogs[i_soi]
                     }
         else:
             inputs = {"n_analogs": n_analogs,
@@ -112,7 +114,8 @@ def soi_iterable(n_analogs, soi_input, soi_output, analog_input, analog_output, 
                     "val_soi_output": val_soi_output[i_soi],
                     "val_analog_output": val_analog_output,
                     "progression_soi": progression_soi,
-                    "progression_analog": progression_analog,}
+                    "progression_analog": progression_analog,
+                    "best_analogs": best_analogs if best_analogs is None else best_analogs[i_soi]}
         yield inputs
 
 def soi_iterable_dates(n_analogs, soi_input, soi_output, analog_input, analog_output, mask, analog_dates_months, soi_dates_months, analog_dates_years, soi_dates_years, uncertainties = 0, gates = None):
@@ -161,19 +164,23 @@ def plot_histogram(selected_analogs_histogram, random_soi_output, dir_settings, 
     plt.style.use("default")
     # Step 2: Set up histogram parameters (customize as needed)
     num_bins = 10  # Example number of bins
-    hist_range = (np.min(selected_analogs_histogram), np.max(selected_analogs_histogram))  # Range of histogram
+    if type(all_analogs_histogram)!=type(None):
+        hist_range = (np.min(all_analogs_histogram), np.max(all_analogs_histogram))
+    else:
+        hist_range = (np.min(selected_analogs_histogram), np.max(selected_analogs_histogram))  # Range of histogram
     hist_color = 'deepskyblue'  # Color of the histogram bars
     hist_label = 'Analog Outputs'  # Label for the histogram
 
     # Step 3: Create the histogram
     plt.figure(figsize=(10, 6))  # Create a new figure for the histogram
-    if type(all_analogs_histogram)!=type(None):
-        plt.hist(all_analogs_histogram, bins=num_bins, range=hist_range, color='moccasin', label='All Analog Outputs', alpha = .5, density=True)
+
     if type(regional_analogs_histogram)!=type(None):
         plt.hist(regional_analogs_histogram, bins=num_bins, range=hist_range, color='orchid', label='Regional Analog Outputs', alpha = 1, density=True, histtype='step', linewidth=8) 
     plt.hist(selected_analogs_histogram, bins=num_bins, range=hist_range, color=hist_color, label=hist_label, alpha =1, density=True,histtype='step', linewidth=8)
+    if type(all_analogs_histogram)!=type(None):
+        plt.hist(all_analogs_histogram, bins=num_bins, range=hist_range, color='moccasin', label='All Analog Outputs', alpha = .5, density=True, zorder=0)
     # Plot a vertical line at the value of random_soi_output
-    plt.axvline(x=random_soi_output, color='tomato', linestyle='--', linewidth=2, label='Truth')
+    plt.axvline(x=random_soi_output, color='midnightblue', linestyle='--', linewidth=2, label='Truth')
     plt.title('Histogram of Selected Analog Outputs')  # Step 4: Label the histogram
     plt.xlabel('Output Value (sigma)')
     plt.ylabel('Frequency')
@@ -422,12 +429,23 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                             plots.monthly_analysis(soi_months_repeated, best_analog_months, settings)
                             exit()
                     else:
+                        best_analogs_path = dir_settings["metrics_directory"]+settings["savename_prefix"] + '_best_masked_analogs.pickle'
+                        if not os.path.exists(best_analogs_path):
+                            # If we don't have analogs saved, we will calculate them later
+                            net_best_analogs = None
+                        else:
+                            # If we do already have them saved, we will load them
+                            # Load the array from the pickle file
+                            with open(best_analogs_path, 'rb') as file:
+                                net_best_analogs = pickle.load(file)
                         soi_iterable_instance = soi_iterable(n_analogues,
                                                             soi_input,
                                                             soi_output,
                                                             analog_input,
                                                             analog_output,
-                                                            mask, 1, val_analog_output=analog_output_val, val_soi_output=soi_output_val, progression_analog=progression_analog, progression_soi=progression_soi, gates = gates)
+                                                            mask, net_best_analogs, 1, val_analog_output=analog_output_val,val_soi_output=soi_output_val, progression_analog=progression_analog, progression_soi=progression_soi, gates = gates)
+                        
+
  
                     if settings["median"] or settings["percentiles"]!=None:
                         net_err = np.array(run_complex_operations(metrics.super_classification_operation,
@@ -463,12 +481,21 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                     else:
                         
                         net_err = []
+                        net_best_analogs = np.zeros((soi_input.shape[0], n_analogues[-1]))
+                        soi_idx = 0
                         for result in run_complex_operations(metrics.mse_operation,
                                                                     soi_iterable_instance,
                                                                     pool,
                                                                     chunksize=5):
-                            net_err.append(result)
-                        net_err = np.array(net_err)
+                            errors = result[0:-1] #grab all metrics besides the best analogs
+                            best_analogs = result[-1] #grab the best analogs
+                            net_err.append(errors)
+                            net_best_analogs[soi_idx] = np.array(best_analogs)
+                            soi_idx += 1
+                        with open(dir_settings["metrics_directory"]+settings["savename_prefix"]
+                            + '_best_masked_analogs.pickle', 'wb') as f:
+                            pickle.dump(net_best_analogs.astype(int), f)
+                        net_err = np.array(net_err) #shape soi x metric # x n_analogs
                         error_network[:, :] = net_err[:,0,:]
                         analog_match_error = net_err[:,1,:] 
                         prediction_spread = net_err[:,2,:]
@@ -534,20 +561,29 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
     if not ignore_baselines:
         with Pool(n_processes) as pool:
             sqrt_area_weights = np.sqrt(np.abs(np.cos(np.deg2rad(lat)))[np.newaxis, :, np.newaxis, np.newaxis])
+            best_global_analogs_path = dir_settings["metrics_directory"]+settings["savename_prefix"] + '_best_global_analogs.pickle'
+            if not os.path.exists(best_global_analogs_path):
+                # If we don't have analogs saved, we will calculate them later
+                best_global_analogs = None
+            else:
+                # If we do already have them saved, we will load them
+                # Load the array from the pickle file
+                with open(best_global_analogs_path, 'rb') as file:
+                    best_global_analogs = pickle.load(file)
             if settings["median"] or settings["error_calc"]=="mse"or settings["percentiles"]!=None:
                 soi_iterable_instance = soi_iterable(n_analogues,
                                                 soi_input,
                                                 soi_output,
                                                 analog_input,
                                                 analog_output,
-                                                sqrt_area_weights, uncertainties=1, val_analog_output=analog_output_val, val_soi_output=soi_output_val, progression_analog=progression_analog, progression_soi=progression_soi)
+                                                sqrt_area_weights, best__global_analogs, uncertainties=1, val_analog_output=analog_output_val, val_soi_output=soi_output_val, progression_analog=progression_analog, progression_soi=progression_soi)
             else:
                 soi_iterable_instance = soi_iterable(n_analogues,
                                                 soi_input,
                                                 soi_output,
                                                 analog_input,
                                                 analog_output,
-                                                sqrt_area_weights, progression_analog=progression_analog, progression_soi=progression_soi)
+                                                sqrt_area_weights, best__global_analogs, progression_analog=progression_analog, progression_soi=progression_soi)
             if settings["median"] or settings["percentiles"]!=None:
                 glob_err = np.array(run_complex_operations(metrics.super_classification_operation,
                                                                 soi_iterable_instance,
@@ -558,6 +594,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                 global_prediction_spread = glob_err[:,2,:]
                 global_modal_fraction = glob_err[:,3,:]
                 global_entropy_spread = glob_err[:,4,:]
+
                 
             elif settings["error_calc"] == "classify":
                 error_globalcorr[:, :] = run_complex_operations(metrics.classification_operation,
@@ -576,10 +613,23 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                                                                 pool,
                                                                 chunksize=soi_input.shape[0]//n_processes,)
             else:
-                glob_err = np.array(run_complex_operations(metrics.mse_operation,
-                                                                        soi_iterable_instance,
-                                                                        pool,
-                                                                        chunksize=soi_input.shape[0]//n_processes,))
+
+                glob_err = []
+                best_global_analogs = np.zeros((soi_input.shape[0], n_analogues[-1]))
+                soi_idx = 0
+                for result in run_complex_operations(metrics.mse_operation,
+                                                            soi_iterable_instance,
+                                                            pool,
+                                                            chunksize=5):
+                    errors = result[0:-1] #grab all metrics besides the best analogs
+                    best_analogs = result[-1] #grab the best analogs
+                    glob_err.append(errors)
+                    best_global_analogs[soi_idx] = np.array(best_analogs)
+                    soi_idx += 1
+                with open(dir_settings["metrics_directory"]+settings["savename_prefix"]
+                    + '_best_global_analogs.pickle', 'wb') as f:
+                    pickle.dump(best_global_analogs.astype(int), f)
+                glob_err = np.array(glob_err)
                 error_globalcorr[:, :] = glob_err[:,0,:]
                 global_analog_match_error = glob_err[:,1,:] 
                 global_prediction_spread = glob_err[:,2,:]
@@ -605,12 +655,21 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
             progression_analog_reg = []
             progression_soi_reg = []
         sqrt_area_weights = np.sqrt(np.abs((np.cos(np.deg2rad(lat_reg))[np.newaxis, :, np.newaxis, np.newaxis])))
+        best_region_analogs_path = dir_settings["metrics_directory"]+settings["savename_prefix"] + '_best_region_analogs.pickle'
+        if not os.path.exists(best_region_analogs_path):
+            # If we don't have analogs saved, we will calculate them later
+            best_region_analogs = None
+        else:
+            # If we do already have them saved, we will load them
+            # Load the array from the pickle file
+            with open(best_region_analogs_path, 'rb') as file:
+                best_region_analogs = pickle.load(file)
         soi_iterable_instance = soi_iterable(n_analogues,
                                                 soi_reg,
                                                 soi_output,
                                                 analog_reg,
                                                 analog_output,
-                                                sqrt_area_weights, uncertainties = 1, val_analog_output=analog_output_val, val_soi_output=soi_output_val, progression_analog=progression_analog_reg, progression_soi=progression_soi_reg)
+                                                sqrt_area_weights, best_region_analogs,uncertainties = 1, val_analog_output=analog_output_val, val_soi_output=soi_output_val, progression_analog=progression_analog_reg, progression_soi=progression_soi_reg)
         if settings["median"] or settings["percentiles"]!=None:
             error_corr_reg = np.array(run_complex_operations(metrics.super_classification_operation,
                                                             soi_iterable_instance,
@@ -639,11 +698,22 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                                                             chunksize=soi_input.shape[0]//n_processes,)
         else:
             error_corr_reg = []
+            best_region_analogs = np.zeros((soi_input.shape[0], n_analogues[-1]))
+            soi_idx = 0
             for result in run_complex_operations(metrics.mse_operation,
                                                             soi_iterable_instance,
                                                             pool,
                                                             chunksize=soi_input.shape[0]//n_processes,):
-                error_corr_reg.append(result)
+              
+
+                errors = result[0:-1] #grab all metrics besides the best analogs
+                best_analogs = result[-1] #grab the best analogs
+                error_corr_reg.append(errors)
+                best_region_analogs[soi_idx] = np.array(best_analogs)
+                soi_idx += 1
+            with open(dir_settings["metrics_directory"]+settings["savename_prefix"]
+                    + '_best_region_analogs.pickle', 'wb') as f:
+                pickle.dump(best_region_analogs.astype(int), f)
             error_corr_reg = np.array(error_corr_reg)
             error_corr[:, :] = error_corr_reg[:,0,:]
             regional_analog_match_error = error_corr_reg[:,1,:] 
@@ -658,20 +728,29 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
         with Pool(n_processes) as pool:
             cust_reg_map = np.zeros(np.shape(mask))
             cust_reg_map = build_data.extract_region(cust_reg_map, regions.get_region_dict(settings["correlation_region_name"]), lat=lat, lon=lon, mask_builder = 1)
+            best_cust_analogs_path = dir_settings["metrics_directory"]+settings["savename_prefix"] + '_best_cust_analogs.pickle'
+            if not os.path.exists(best_cust_analogs_path):
+            # If we don't have analogs saved, we will calculate them later
+                best_cust_analogs = None
+            else:
+            # If we do already have them saved, we will load them
+            # Load the array from the pickle file
+                with open(best_cust_analogs_path, 'rb') as file:
+                    best_cust_analogs = pickle.load(file)
             if settings["median"] or settings["error_calc"]=="mse" or settings["percentiles"]!=None:
                 soi_iterable_instance = soi_iterable(n_analogues,
                                                 soi_input,
                                                 soi_output,
                                                 analog_input,
                                                 analog_output,
-                                                cust_reg_map, uncertainties = 1, val_analog_output=analog_output_val, val_soi_output=soi_output_val, progression_analog=progression_analog, progression_soi=progression_soi)
+                                                cust_reg_map, best_cust_analogs, uncertainties = 1, val_analog_output=analog_output_val, val_soi_output=soi_output_val, progression_analog=progression_analog, progression_soi=progression_soi)
             else:
                 soi_iterable_instance = soi_iterable(n_analogues,
                                                 soi_input,
                                                 soi_output,
                                                 analog_input,
                                                 analog_output,
-                                                cust_reg_map,progression_analog=progression_analog, progression_soi=progression_soi)
+                                                cust_reg_map, best_cust_analogs, progression_analog=progression_analog, progression_soi=progression_soi)
             if settings["median"] or settings["percentiles"]!=None:
                 cust_err = np.array(run_complex_operations(metrics.super_classification_operation,
                                                             soi_iterable_instance,
@@ -700,10 +779,24 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                                                             pool,
                                                             chunksize=soi_input.shape[0]//n_processes,)
             else:
-                cust_err = np.array(run_complex_operations(metrics.mse_operation,
-                                                            soi_iterable_instance,
-                                                            pool,
-                                                            chunksize=soi_input.shape[0]//n_processes,))
+                cust_err = []
+                best_cust_analogs = np.zeros((soi_input.shape[0], n_analogues[-1]))
+                soi_idx = 0
+                for result in run_complex_operations(metrics.mse_operation,
+                                                                soi_iterable_instance,
+                                                                pool,
+                                                                chunksize=soi_input.shape[0]//n_processes,):
+                
+
+                    errors = result[0:-1] #grab all metrics besides the best analogs
+                    best_analogs = result[-1] #grab the best analogs
+                    cust_err.append(errors)
+                    best_cust_analogs[soi_idx] = np.array(best_analogs)
+                    soi_idx += 1
+                with open(dir_settings["metrics_directory"]+settings["savename_prefix"]
+                        + '_best_cust_analogs.pickle', 'wb') as f:
+                    pickle.dump(best_cust_analogs.astype(int), f)
+                cust_err = np.array(cust_err)
                 error_customcorr[:, :] = cust_err[:,0,:]
                 NH_analog_match_error = cust_err[:,1,:] 
                 NH_prediction_spread = cust_err[:,2,:]
@@ -792,6 +885,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
     # Create and save subplots
     create_subplots(random_soi_input, random_soi_output, selected_analogs, selected_analogs_output, mask, settings, lat, lon, dir_settings, '_example.png')
     create_subplots(random_soi_input * mask, random_soi_output, selected_analogs * mask, selected_analogs_output, mask, settings, lat, lon, dir_settings, '_example_masked.png')
+
 
 
 # -----------------------
