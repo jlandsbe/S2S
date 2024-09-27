@@ -357,7 +357,7 @@ def train_experiments(
                         exit()
                     # PLOT MODEL EVALUATION METRICS
                     if settings["gates"]:
-                        metrics_dict = model_diagnostics_torch.visualize_metrics(settings, model, soi_test_input, soi_test_output,
+                        metrics_dict, crps_dict = model_diagnostics_torch.visualize_metrics(settings, model, soi_test_input, soi_test_output,
                                                                         analog_input, analog_output, np.array(progression_analogs), np.array(progression_soi), lat,
                                                                         lon, weights_val, persist_err,
                                                                         n_testing_soi=int(soi_test_input.shape[0]*settings["percent_soi"]),
@@ -366,7 +366,7 @@ def train_experiments(
                                                                         soi_train_output = None,
                                                                         fig_savename="subset_skill_score_vs_nanalogues", gates=gates)
                     else:
-                        metrics_dict = model_diagnostics_torch.visualize_metrics(settings, model, soi_test_input, soi_test_output,
+                        metrics_dict, crps_dict = model_diagnostics_torch.visualize_metrics(settings, model, soi_test_input, soi_test_output,
                                                                         analog_input, analog_output, np.array(progression_analogs), np.array(progression_soi), lat,
                                                                         lon, weights_val, persist_err,
                                                                         n_testing_soi=int(soi_test_input.shape[0]*settings["percent_soi"]),
@@ -380,5 +380,9 @@ def train_experiments(
                     with open(dir_settings["metrics_directory"]+settings["savename_prefix"]
                             + '_subset_metrics.pickle', 'wb') as f:
                         pickle.dump(metrics_dict, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+                    with open(dir_settings["metrics_directory"]+settings["savename_prefix"]
+                            + '_crps_only_metrics.pickle', 'wb') as f:
+                        pickle.dump(crps_dict, f, protocol=pickle.HIGHEST_PROTOCOL)
 
 

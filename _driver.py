@@ -14,7 +14,7 @@ __author__ = "Jamin K. Rader, Elizabeth A. Barnes, and Randal J. Barnes"
 __version__ = "30 March 2023"
 
 # List of experiments to run
-EXP_NAME_LIST = ("midwest_month1_precip_temp_precip_out_test",)
+EXP_NAME_LIST = ("us_cont_temp_to_temp","natl_temp_to_temp_2month","natl_temp_wind_to_wind")
 if __name__ == "__main__":
 
     start_time = time.time()

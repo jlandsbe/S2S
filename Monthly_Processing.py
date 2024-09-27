@@ -90,8 +90,8 @@ import os
 
 
 # Paths to your netCDF files and output directory
-file_pattern = '/barnes-scratch/DATA/CESM2-LE/processed_data/monthly/U250/*.nc'
-output_directory = '/barnes-scratch/DATA/CESM2-LE/processed_data/monthly/Detrended_U250'
+file_pattern = '/barnes-scratch/DATA/CESM2-LE/processed_data/monthly/U/*.nc'
+output_directory = '/barnes-scratch/DATA/CESM2-LE/processed_data/monthly/Detrended_U'
 
 
 # Get a list of all netCDF files
@@ -103,7 +103,7 @@ all_datasets = xr.open_mfdataset(files, concat_dim='time', combine='nested', par
 #could possibly add chunking: chunk_sizes = {'time': -1, 'lat': 1, 'lon': 1}
 
 # Extract the variable of interest
-temperature_all = all_datasets['Uzm']
+temperature_all = all_datasets['U']
 
 
 # Group by month and calculate the mean for each month at each lat/lon coordinate
@@ -115,12 +115,12 @@ for file in files:
     ds = xr.open_dataset(file)
     
     # Extract the variable of interest
-    temperature = ds['Uzm']
+    temperature = ds['U']
     
     # Subtract the global monthly mean from the data
     detrended_temperature = temperature.groupby('time') - daily_mean_all
         # Create a new dataset with only the detrended TREFHT variable
-    detrended_ds = xr.Dataset({'Uzm': detrended_temperature})
+    detrended_ds = xr.Dataset({'U': detrended_temperature})
     
     # Save the detrended data to a new netCDF file
     output_file = os.path.join(output_directory, os.path.basename(file))

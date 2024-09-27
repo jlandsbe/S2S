@@ -44,7 +44,7 @@ if dir_settings["data_directory"].split("/")[1] != "Users":
     ct.config["data_dir"] = "/scratch/jlandsbe/cartopy_maps"
 mpl.rcParams["figure.facecolor"] = "white"
 mpl.rcParams["figure.dpi"] = 150
-plt.style.use("seaborn-v0_8")
+#plt.style.use("seaborn-v0_8")
 dpiFig = 300
 
 
@@ -250,7 +250,7 @@ def summarize_errors(metrics_dict):
     plt.title('MAE')
 
 
-def summarize_skill_score(metrics_dict, settings):
+def summarize_skill_score(metrics_dict, settings, crps = 0):
     marker_size = 15
     alpha = .8
     error_type = settings["error_calc"]
@@ -277,18 +277,18 @@ def summarize_skill_score(metrics_dict, settings):
     x_plot = metrics.eval_function(metrics_dict["error_corr"])
     x_plot = 1. - skill_score_helper(x_plot, x_climatology_baseline, error_type)
     plt.plot(metrics_dict["analogue_vector"], x_plot, '.-', markersize=marker_size, label='region corr.',
-             color="lightskyblue", alpha=alpha)
+             color="orchid", alpha=alpha)
     
 
     x_plot = metrics_dict["error_persist"]
     x_plot = 1. - skill_score_helper(x_plot, x_climatology_baseline, error_type)
     plt.plot(metrics_dict["analogue_vector"], x_plot, '.-', markersize=marker_size, label='persistence',
-             color="cornflowerblue", alpha=alpha)
+             color="saddlebrown", alpha=alpha)
 
     x_plot = metrics.eval_function(metrics_dict["error_globalcorr"])
     x_plot = 1. - skill_score_helper(x_plot, x_climatology_baseline, error_type)
     plt.plot(metrics_dict["analogue_vector"], x_plot, '.-', markersize=marker_size, label='global corr.',
-             color="mediumblue", alpha=alpha)
+             color="rosybrown", alpha=alpha)
 
     x_plot = metrics.eval_function(metrics_dict["error_random"])
     x_plot = 1. - skill_score_helper(x_plot, x_climatology_baseline, error_type)
@@ -298,7 +298,7 @@ def summarize_skill_score(metrics_dict, settings):
     x_plot = metrics.eval_function(metrics_dict["error_network"])
     x_plot = 1. - skill_score_helper(x_plot, x_climatology_baseline, error_type)
     plt.plot(metrics_dict["analogue_vector"], x_plot, '.-', markersize=marker_size, label='masked analog',
-             color="orange", alpha=alpha)
+             color="deepskyblue", alpha=alpha)
 
     plt.ylabel('skill score')
     plt.xlabel('number of analogues averaged')
@@ -311,6 +311,8 @@ def summarize_skill_score(metrics_dict, settings):
         plt.title('Anomaly Correlation Coefficient')
     elif settings["percentiles"] != None:
         plt.title('Classification Accuracy')
+    elif crps:
+        plt.title('CRPS Skill Score')
     else:
         plt.title('MAE Skill Score')
 

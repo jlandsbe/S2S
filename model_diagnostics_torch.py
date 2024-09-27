@@ -18,6 +18,7 @@ import matplotlib.animation as animation
 import scipy.stats
 import random
 import pickle
+import CRPS
 warnings.filterwarnings(action='ignore', message='Mean of empty slice')
 warnings.filterwarnings(action='ignore', message='All-NaN slice encountered')
 warnings.filterwarnings("ignore", category=ShapelyDeprecationWarning)
@@ -57,7 +58,7 @@ def visualize_metrics(settings, model, soi_input, soi_output, analog_input, anal
         prog_analogs = []
         prog_soi = []
     # assess model performance and compare to baselines
-    metrics_dict = assess_metrics(settings, model,
+    metrics_dict, crps_dict = assess_metrics(settings, model,
                                   soi_input[i_soi, :, :, :],
                                   soi_output[i_soi],
                                   analog_input[i_analog, :, :, :],
@@ -70,7 +71,7 @@ def visualize_metrics(settings, model, soi_input, soi_output, analog_input, anal
                                   analogue_vector=analogue_vector,
                                   fig_savename=fig_savename, my_masks = my_masks, gates = gates, analog_dates = analog_dates, soi_dates = soi_dates)
 
-    return metrics_dict
+    return metrics_dict, crps_dict
 
 
 def run_complex_operations(operation, inputs, pool, chunksize):
@@ -195,6 +196,41 @@ def plot_histogram(selected_analogs_histogram, random_soi_output, dir_settings, 
     plt.savefig(histogram_filename, dpi=100, bbox_inches='tight')  # Save the figure
     plt.close()  # Close the figure to prevent it from displaying in the notebook or script output
 
+def plot_bands(settings, dir_settings, total_max, total_min, truth, mask_min, mask_max, regional_min = None, regional_mask = None, x = None, filename_suffix = "range_bands.png", title_text = "?"):
+    plt.style.use("default")
+    if x == None:
+        x = np.arange(len(truth))  # X-axis as index number
+
+    plt.figure(figsize=(10, 6))
+    
+    # Plot the truth value as a black line
+    plt.plot(x, truth, color='midnightblue', label='Truth', linewidth=3)
+    
+    # Plot the moccasin band between total_min and total_max
+    plt.fill_between(x, total_min, total_max, color='moccasin', alpha=0.5, label='Total Range')
+    if type(regional_mask) != type(None):
+        plt.fill_between(x, regional_min, regional_mask, color='orchid', alpha=0.5, label='Regional Range', edgecolor='orchid', linewidth=1.5)
+    # Plot the deepskyblue band between mask_min and mask_max
+    plt.fill_between(x, mask_min, mask_max, color='deepskyblue', alpha=0.5, label='Mask Range', edgecolor='deepskyblue', linewidth=1.5)
+
+    
+    # Set labels and title
+    plt.xlabel('Index Number')
+    plt.ylabel('Output Value (sigma)')
+    plt.title('Confinement of Analog Outputs for ' + title_text + " Analogs")
+    plt.legend()
+    
+    # Remove top and right spines
+    ax = plt.gca()
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    z = .08*(np.max(total_max) - np.min(total_min))
+    plt.ylim(np.min(total_min) - z, np.max(total_max) + z)
+    
+        # Save the plot to a file
+    plt.savefig(dir_settings["figure_directory"] + settings["savename_prefix"] + filename_suffix, dpi=100, bbox_inches='tight')
+    plt.close()
+
 def create_subplots(random_soi_input, random_soi_output, selected_analogs, selected_analogs_output, mask, settings, lat, lon, dir_settings, filename_suffix):
     plt.style.use("default")
     if random_soi_input.shape[-1] != 1:
@@ -294,7 +330,59 @@ def create_subplots(random_soi_input, random_soi_output, selected_analogs, selec
     fig.savefig(dir_settings["figure_directory"] + settings["savename_prefix"] + filename_suffix, dpi=dpiFig, bbox_inches='tight')
     plt.close()
 
+def process_results(run_complex_operations, metrics_function, soi_iterable, pool, n_analogues, 
+                    soi_input_shape, metrics_directory, savename_prefix, file_suffix, chunksize=5):
+    """
+    Runs the complex operations and processes the results, including appending errors and best analogs,
+    saving the best analogs to a file, and returning error metrics.
 
+    Args:
+        run_complex_operations: Function to run operations.
+        metrics_function: Metrics function (e.g., mse_operation) used for the complex operations.
+        soi_iterable: Iterable, data to be passed to the complex operations.
+        pool: Multiprocessing pool for parallel operations.
+        n_analogues: List, number of analogues.
+        soi_input_shape: Tuple, shape of the input data for initializing arrays.
+        metrics_directory: String, path to directory where metrics will be saved.
+        savename_prefix: String, prefix for saving the pickle file.
+        file_suffix: String, suffix for the file name to distinguish between local/global/etc.
+        chunksize: Integer, the chunk size for multiprocessing.
+
+    Returns:
+        Tuple of error metrics (error_network, analog_match_error, prediction_spread, 
+        prediction_IQR, prediction_min, prediction_max, prediction_range).
+    """
+    err = []
+    all_best_analogs = np.zeros((soi_input_shape[0], n_analogues[-1]))
+    soi_idx = 0
+
+    # Running complex operations and processing results
+    for result in run_complex_operations(metrics_function, soi_iterable, pool, chunksize=chunksize):
+        errors = result[:-1]  # Grab all metrics besides the best analogs
+        best_analogs = result[-1]  # Grab the best analogs
+        err.append(errors)
+        all_best_analogs[soi_idx] = np.array(best_analogs)
+        soi_idx += 1
+
+    # Save best analogs to a pickle file
+    save_path = f"{metrics_directory}{savename_prefix}_best_{file_suffix}_analogs.pickle"
+    with open(save_path, 'wb') as f:
+        pickle.dump(all_best_analogs.astype(int), f)
+
+    # Convert net_err to numpy array for further processing
+    net_err = np.array(err)  # shape soi x metric # x n_analogs
+
+    # Extract various error metrics
+    error_network = net_err[:, 0, :]
+    analog_match_error = net_err[:, 1, :]
+    prediction_spread = net_err[:, 2, :]
+    prediction_IQR = net_err[:, 3, :]
+    prediction_min = net_err[:, 4, :]
+    prediction_max = net_err[:, 5, :]
+    prediction_CRPS = net_err[:, 6, :]
+    prediction_range = prediction_max - prediction_min
+
+    return error_network, analog_match_error, prediction_spread, prediction_IQR, prediction_min, prediction_max, prediction_range, prediction_CRPS
 
 def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                    analog_output, progression_analog, progression_soi, lat, lon,
@@ -337,6 +425,8 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
     error_corr = np.zeros((len_analogues, soi_input.shape[0])).T * np.nan
     error_customcorr = np.zeros((len_analogues, soi_input.shape[0])).T * np.nan
     error_globalcorr = np.zeros((len_analogues, soi_input.shape[0])).T * np.nan
+    global_crps = np.zeros((len_analogues, soi_input.shape[0])).T * np.nan
+    NH_crps = np.zeros((len_analogues, soi_input.shape[0])).T * np.nan
 
     # These ones do not require parallelization
     if settings["error_calc"]!="map":
@@ -465,13 +555,11 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                                                                     chunksize=soi_input.shape[0]//n_processes,)
                     elif settings["error_calc"] == "map":
                         #number of analogs x lat x lon
-                        net_err  = run_complex_operations(metrics.map_operation,
-                                                                    soi_iterable_instance,
-                                                                    pool,
-                                                                    chunksize=soi_input.shape[0]//n_processes,)
-                        error_network = net_err[0]
-                        analog_match_error = net_err[1]
-                        prediction_spread = net_err[2]
+                        error_network, analog_match_error, prediction_spread,prediction_IQR, prediction_min, prediction_max,prediction_range, prediction_crps = process_results(
+                            run_complex_operations, metrics.map_operation, soi_iterable_instance, pool, 
+                            n_analogues, soi_input.shape, dir_settings["metrics_directory"], 
+                            settings["savename_prefix"], "masked"
+                        )
                     elif settings["error_calc"] == "field":
                         net_err = np.array(run_complex_operations(metrics.field_operation,
                                                                     soi_iterable_instance,
@@ -480,27 +568,12 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
 
                     else:
                         
-                        net_err = []
-                        net_best_analogs = np.zeros((soi_input.shape[0], n_analogues[-1]))
-                        soi_idx = 0
-                        for result in run_complex_operations(metrics.mse_operation,
-                                                                    soi_iterable_instance,
-                                                                    pool,
-                                                                    chunksize=5):
-                            errors = result[0:-1] #grab all metrics besides the best analogs
-                            best_analogs = result[-1] #grab the best analogs
-                            net_err.append(errors)
-                            net_best_analogs[soi_idx] = np.array(best_analogs)
-                            soi_idx += 1
-                        with open(dir_settings["metrics_directory"]+settings["savename_prefix"]
-                            + '_best_masked_analogs.pickle', 'wb') as f:
-                            pickle.dump(net_best_analogs.astype(int), f)
-                        net_err = np.array(net_err) #shape soi x metric # x n_analogs
-                        error_network[:, :] = net_err[:,0,:]
-                        analog_match_error = net_err[:,1,:] 
-                        prediction_spread = net_err[:,2,:]
-                        prediction_IQR = net_err[:,3,:]
-                        prediction_range = net_err[:,4,:]
+                        error_network, analog_match_error, prediction_spread,prediction_IQR, prediction_min, prediction_max,prediction_range, prediction_crps = process_results(
+                            run_complex_operations, metrics.mse_operation, soi_iterable_instance, pool, 
+                            n_analogues, soi_input.shape, dir_settings["metrics_directory"], 
+                            settings["savename_prefix"], "masked"
+                        )
+
 
 
 
@@ -602,39 +675,24 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                                                                 pool,
                                                                 chunksize=soi_input.shape[0]//n_processes,)
             elif settings["error_calc"] == "map":
-                    #number of analogs x time x lat x lon
-                    error_globalcorr = run_complex_operations(metrics.map_operation,
-                                                                soi_iterable_instance,
-                                                                pool,
-                                                                chunksize=soi_input.shape[0]//n_processes,)
+                error_globalcorr, global_analog_match_error, global_prediction_spread, \
+                global_IQR, global_min, global_max, \
+                global_range, global_crps = process_results(
+                run_complex_operations, metrics.map_operation, soi_iterable_instance, pool, 
+                n_analogues, soi_input.shape, dir_settings["metrics_directory"], 
+                settings["savename_prefix"], "global")
             elif settings["error_calc"] == "field":
                 error_globalcorr[:, :] = run_complex_operations(metrics.field_operation,
                                                                 soi_iterable_instance,
                                                                 pool,
                                                                 chunksize=soi_input.shape[0]//n_processes,)
             else:
-
-                glob_err = []
-                best_global_analogs = np.zeros((soi_input.shape[0], n_analogues[-1]))
-                soi_idx = 0
-                for result in run_complex_operations(metrics.mse_operation,
-                                                            soi_iterable_instance,
-                                                            pool,
-                                                            chunksize=5):
-                    errors = result[0:-1] #grab all metrics besides the best analogs
-                    best_analogs = result[-1] #grab the best analogs
-                    glob_err.append(errors)
-                    best_global_analogs[soi_idx] = np.array(best_analogs)
-                    soi_idx += 1
-                with open(dir_settings["metrics_directory"]+settings["savename_prefix"]
-                    + '_best_global_analogs.pickle', 'wb') as f:
-                    pickle.dump(best_global_analogs.astype(int), f)
-                glob_err = np.array(glob_err)
-                error_globalcorr[:, :] = glob_err[:,0,:]
-                global_analog_match_error = glob_err[:,1,:] 
-                global_prediction_spread = glob_err[:,2,:]
-                global_IQR = glob_err[:,3,:]
-                global_range = glob_err[:,4,:]
+                error_globalcorr, global_analog_match_error, global_prediction_spread, \
+                global_IQR, global_min, global_max, \
+                global_range, global_crps = process_results(
+                run_complex_operations, metrics.mse_operation, soi_iterable_instance, pool, 
+                n_analogues, soi_input.shape, dir_settings["metrics_directory"], 
+                settings["savename_prefix"], "global")
             print("finished global error")
     # -----------------------
     # Simple TARGET REGION correlation baseline
@@ -681,11 +739,12 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
             regional_modal_fraction = error_corr_reg[:,3,:]
             regional_entropy_spread = error_corr_reg[:,4,:]
         elif settings["error_calc"] == "map":
-            #number of analogs x time x lat x lon
-            error_corr = run_complex_operations(metrics.map_operation,
-                                                        soi_iterable_instance,
-                                                        pool,
-                                                        chunksize=soi_input.shape[0]//n_processes,)
+            error_corr, regional_analog_match_error, regional_prediction_spread, \
+            regional_IQR, regional_min, regional_max, \
+            regional_range, regional_crps = process_results(
+            run_complex_operations, metrics.map_operation, soi_iterable_instance, pool, 
+            n_analogues, soi_input.shape, dir_settings["metrics_directory"], 
+            settings["savename_prefix"], "global")
         elif settings["error_calc"] == "classify":
             error_corr[:, :] = run_complex_operations(metrics.classification_operation,
                                                             soi_iterable_instance,
@@ -697,29 +756,13 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                                                             pool,
                                                             chunksize=soi_input.shape[0]//n_processes,)
         else:
-            error_corr_reg = []
-            best_region_analogs = np.zeros((soi_input.shape[0], n_analogues[-1]))
-            soi_idx = 0
-            for result in run_complex_operations(metrics.mse_operation,
-                                                            soi_iterable_instance,
-                                                            pool,
-                                                            chunksize=soi_input.shape[0]//n_processes,):
-              
-
-                errors = result[0:-1] #grab all metrics besides the best analogs
-                best_analogs = result[-1] #grab the best analogs
-                error_corr_reg.append(errors)
-                best_region_analogs[soi_idx] = np.array(best_analogs)
-                soi_idx += 1
-            with open(dir_settings["metrics_directory"]+settings["savename_prefix"]
-                    + '_best_region_analogs.pickle', 'wb') as f:
-                pickle.dump(best_region_analogs.astype(int), f)
-            error_corr_reg = np.array(error_corr_reg)
-            error_corr[:, :] = error_corr_reg[:,0,:]
-            regional_analog_match_error = error_corr_reg[:,1,:] 
-            regional_prediction_spread = error_corr_reg[:,2,:]
-            regional_IQR = error_corr_reg[:,3,:]
-            regional_range = error_corr_reg[:,4,:]
+            error_corr, regional_analog_match_error, regional_prediction_spread, \
+            regional_IQR, regional_min, regional_max, \
+            regional_range, regional_crps = process_results(
+            run_complex_operations, metrics.mse_operation, soi_iterable_instance, pool, 
+            n_analogues, soi_input.shape, dir_settings["metrics_directory"], 
+            settings["savename_prefix"], "global")
+            
         print("finished target region error")
         
     # -----------------------
@@ -779,29 +822,13 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                                                             pool,
                                                             chunksize=soi_input.shape[0]//n_processes,)
             else:
-                cust_err = []
-                best_cust_analogs = np.zeros((soi_input.shape[0], n_analogues[-1]))
-                soi_idx = 0
-                for result in run_complex_operations(metrics.mse_operation,
-                                                                soi_iterable_instance,
-                                                                pool,
-                                                                chunksize=soi_input.shape[0]//n_processes,):
-                
-
-                    errors = result[0:-1] #grab all metrics besides the best analogs
-                    best_analogs = result[-1] #grab the best analogs
-                    cust_err.append(errors)
-                    best_cust_analogs[soi_idx] = np.array(best_analogs)
-                    soi_idx += 1
-                with open(dir_settings["metrics_directory"]+settings["savename_prefix"]
-                        + '_best_cust_analogs.pickle', 'wb') as f:
-                    pickle.dump(best_cust_analogs.astype(int), f)
-                cust_err = np.array(cust_err)
-                error_customcorr[:, :] = cust_err[:,0,:]
-                NH_analog_match_error = cust_err[:,1,:] 
-                NH_prediction_spread = cust_err[:,2,:]
-                NH_IQR = cust_err[:,3,:]
-                NH_range = cust_err[:,4,:]
+                error_customcorr, NH_analog_match_error, NH_prediction_spread, \
+                NH_IQR, NH_min, NH_max, \
+                NH_range, NH_crps = process_results(
+                run_complex_operations, metrics.mse_operation, soi_iterable_instance, pool, 
+                n_analogues, soi_input.shape, dir_settings["metrics_directory"], 
+                settings["savename_prefix"], "global")
+            print("finished custom region error")
     
     # -----------------------
     # Custom baseline (e.g. mean evolution)
@@ -840,87 +867,99 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
 
     # -----------------------
     # Climatology
-    if settings['median'] or settings["percentiles"]!=None or ignore_baselines:
+    error_climo_crps = None
+    if settings['median'] or settings["percentiles"]!=None:
         error_climo = np.repeat(np.array([1]), len_analogues)
     elif settings["error_calc"] == "map":
         error_climo = metrics.get_analog_errors(soi_output, np.mean(analog_output, axis=0), settings["error_calc"])
     else:
+        error_climo_crps = np.zeros((soi_input.shape[0])) * np.nan
+        for idx, soi_output_ind in enumerate(soi_output):
+            error_climo_crps[idx] = (CRPS.CRPS(analog_output, soi_output_ind).compute()[0])
         error_climo[:] = metrics.get_analog_errors(soi_output, np.mean(analog_output, axis=0), settings["error_calc"]).T
 
 
-# -----------------------
-    # Case Study Plots
-    # Main script
-    
-    num_ans_hist = 30
-    random.seed(21)
-    length_of_soi_output = len(soi_output)
-    random_index = random.randint(0, length_of_soi_output - 1)
-    random_soi_output = soi_output[random_index]
-    random_soi_input = soi_input[random_index]
+    if settings["error_calc"] != "map":
+    # -----------------------
+        # Case Study Plots
+        # Main script
+        
+        num_ans_hist = 30
+        random.seed(21)
+        length_of_soi_output = len(soi_output)
+        random_index = random.randint(0, length_of_soi_output - 1)
+        random_soi_output = soi_output[random_index]
+        random_soi_input = soi_input[random_index]
 
-    #find n closest matches' outputs based on mask
-    mimse_mask = np.mean((random_soi_input * mask - analog_input * mask) ** 2, axis=(1, 2, 3))
-    i_analogs_histogram_mask = np.argsort(mimse_mask, axis=0)[:num_ans_hist]
-    selected_analogs_histogram_mask = analog_output[i_analogs_histogram_mask]
-    #find n closest matches' outputs based on regional mask
-    hist_soi_reg, lat_reg, lon_reg = build_data.extract_region(random_soi_input[np.newaxis, :], regions.get_region_dict(
-            settings["target_region_name"]), lat=lat, lon=lon)
-    mimse_regional = np.mean((hist_soi_reg - analog_reg) ** 2, axis=(1, 2, 3)) #here anlog_reg was defined earlier to be the regionally masked analogs
-    i_analogs_histogram_regional = np.argsort(mimse_regional, axis=0)[:num_ans_hist]
-    selected_analogs_histogram_regional = analog_output[i_analogs_histogram_regional]
-    #all possible analog outputs
-    selected_analogs_histogram_all = analog_output
-    if len(np.shape(selected_analogs_histogram_mask)) > 1:
-        selected_analogs_histogram_mask = np.mean(selected_analogs_histogram_mask, axis=(1, 2))
-        selected_analogs_histogram_regional = np.mean(selected_analogs_histogram_regional, axis=(1, 2))
-        selected_analogs_histogram_all = np.mean(selected_analogs_histogram_all, axis=(1, 2))
-    # Plot and save histogram
-    plot_histogram(selected_analogs_histogram_mask, random_soi_output, dir_settings, settings, selected_analogs_histogram_regional,selected_analogs_histogram_all)
+        #find n closest matches' outputs based on mask
+        mimse_mask = np.mean((random_soi_input * mask - analog_input * mask) ** 2, axis=(1, 2, 3))
+        i_analogs_histogram_mask = np.argsort(mimse_mask, axis=0)[:num_ans_hist]
+        selected_analogs_histogram_mask = analog_output[i_analogs_histogram_mask]
+        #find n closest matches' outputs based on regional mask
+        hist_soi_reg, lat_reg, lon_reg = build_data.extract_region(random_soi_input[np.newaxis, :], regions.get_region_dict(
+                settings["target_region_name"]), lat=lat, lon=lon)
+        mimse_regional = np.mean((hist_soi_reg - analog_reg) ** 2, axis=(1, 2, 3)) #here anlog_reg was defined earlier to be the regionally masked analogs
+        i_analogs_histogram_regional = np.argsort(mimse_regional, axis=0)[:num_ans_hist]
+        selected_analogs_histogram_regional = analog_output[i_analogs_histogram_regional]
+        #all possible analog outputs
+        selected_analogs_histogram_all = analog_output
+        if len(np.shape(selected_analogs_histogram_mask)) > 1:
+            selected_analogs_histogram_mask = np.mean(selected_analogs_histogram_mask, axis=(1, 2))
+            selected_analogs_histogram_regional = np.mean(selected_analogs_histogram_regional, axis=(1, 2))
+            selected_analogs_histogram_all = np.mean(selected_analogs_histogram_all, axis=(1, 2))
+        # Plot and save histogram
+        plot_histogram(selected_analogs_histogram_mask, random_soi_output, dir_settings, settings, selected_analogs_histogram_regional,selected_analogs_histogram_all)
 
-    i_analogs = np.argsort(mimse_mask, axis=0)[:8]
-    selected_analogs = analog_input[i_analogs]
-    selected_analogs_output = analog_output[i_analogs]
+        i_analogs = np.argsort(mimse_mask, axis=0)[:8]
+        selected_analogs = analog_input[i_analogs]
+        selected_analogs_output = analog_output[i_analogs]
 
-    # Create and save subplots
-    create_subplots(random_soi_input, random_soi_output, selected_analogs, selected_analogs_output, mask, settings, lat, lon, dir_settings, '_example.png')
-    create_subplots(random_soi_input * mask, random_soi_output, selected_analogs * mask, selected_analogs_output, mask, settings, lat, lon, dir_settings, '_example_masked.png')
+        # Create and save subplots
+        create_subplots(random_soi_input, random_soi_output, selected_analogs, selected_analogs_output, mask, settings, lat, lon, dir_settings, '_example.png')
+        create_subplots(random_soi_input * mask, random_soi_output, selected_analogs * mask, selected_analogs_output, mask, settings, lat, lon, dir_settings, '_example_masked.png')
+
+    #-----------------------
+        #spread confinment plots
+        all_outputs_max = np.mean(np.max(analog_output, axis=0))
+        all_outputs_min = np.mean(np.min(analog_output, axis=0))
+        num_soi_outputs = len(soi_output)
+        num_ans_idx = 3
+        plot_bands(settings, dir_settings, np.tile(all_outputs_min, num_soi_outputs), np.tile(all_outputs_max, num_soi_outputs),soi_output,prediction_min[:,num_ans_idx], prediction_max[:,num_ans_idx],regional_min[:,num_ans_idx], regional_max[:,num_ans_idx],title_text=str(settings["analogue_vec"][num_ans_idx]))
 
 
+    # -----------------------
+        #Confidence Plots
+        if settings["median"] or settings["percentiles"]!=None:
+            network_confidence_dict = {"Analog Match": analog_match_error, "Prediction Spread": prediction_spread, "Modal Fraction":modal_fraction,"Entropy":entropy_spread}
+            global_confidence_dict = {"Analog Match": global_analog_match_error, "Prediction Spread": global_prediction_spread, "Modal Fraction":global_modal_fraction,"Entropy":global_entropy_spread}
+            NH_cofidence_dict = {"Analog Match": NH_analog_match_error, "Prediction Spread": NH_prediction_spread, "Modal Fraction":NH_modal_fraction,"Entropy":NH_entropy_spread}
+            regional_cofidence_dict = {"Analog Match": regional_analog_match_error, "Prediction Spread": regional_prediction_spread, "Modal Fraction":regional_modal_fraction,"Entropy":regional_entropy_spread}
+            random_confidence_dict = {}
+            climatol = None
+        elif not ignore_baselines:
+            network_confidence_dict = {"Analog Match": analog_match_error, "Prediction Spread": prediction_spread, "Prediction IQR": prediction_IQR, "Prediction Range": prediction_range}
+            global_confidence_dict = {"Analog Match": global_analog_match_error, "Prediction Spread": global_prediction_spread, "Prediction IQR": global_IQR, "Prediction Range": global_range}
+            NH_cofidence_dict = {"Analog Match": NH_analog_match_error, "Prediction Spread": NH_prediction_spread}
+            regional_cofidence_dict = {"Analog Match": regional_analog_match_error, "Prediction Spread": regional_prediction_spread, "Prediction IQR": regional_IQR, "Prediction Range": regional_range}
+            random_confidence_dict = {"Prediction Spread": random_output_spread.T}
+            climatol = error_climo
+        else:
+            network_confidence_dict = {"Analog Match": analog_match_error, "Prediction Spread": prediction_spread, "Prediction IQR": prediction_IQR, "Prediction Range": prediction_range}
+            global_confidence_dict = {}
+            NH_cofidence_dict = {}
+            regional_cofidence_dict = {"Analog Match": regional_analog_match_error, "Prediction Spread": regional_prediction_spread, "Prediction IQR": regional_IQR, "Prediction Range": regional_range}
+            random_confidence_dict = {}
+            climatol = error_climo
 
-# -----------------------
-    #Confidence Plots
-    if settings["median"] or settings["percentiles"]!=None:
-        network_confidence_dict = {"Analog Match": analog_match_error, "Prediction Spread": prediction_spread, "Modal Fraction":modal_fraction,"Entropy":entropy_spread}
-        global_confidence_dict = {"Analog Match": global_analog_match_error, "Prediction Spread": global_prediction_spread, "Modal Fraction":global_modal_fraction,"Entropy":global_entropy_spread}
-        NH_cofidence_dict = {"Analog Match": NH_analog_match_error, "Prediction Spread": NH_prediction_spread, "Modal Fraction":NH_modal_fraction,"Entropy":NH_entropy_spread}
-        regional_cofidence_dict = {"Analog Match": regional_analog_match_error, "Prediction Spread": regional_prediction_spread, "Modal Fraction":regional_modal_fraction,"Entropy":regional_entropy_spread}
-        random_confidence_dict = {}
-        climatol = None
-    elif not ignore_baselines:
-        network_confidence_dict = {"Analog Match": analog_match_error, "Prediction Spread": prediction_spread, "Prediction IQR": prediction_IQR, "Prediction Range": prediction_range}
-        global_confidence_dict = {"Analog Match": global_analog_match_error, "Prediction Spread": global_prediction_spread, "Prediction IQR": global_IQR, "Prediction Range": global_range}
-        NH_cofidence_dict = {"Analog Match": NH_analog_match_error, "Prediction Spread": NH_prediction_spread}
-        regional_cofidence_dict = {"Analog Match": regional_analog_match_error, "Prediction Spread": regional_prediction_spread, "Prediction IQR": regional_IQR, "Prediction Range": regional_range}
-        random_confidence_dict = {"Prediction Spread": random_output_spread.T}
-        climatol = error_climo
-    else:
-        network_confidence_dict = {"Analog Match": analog_match_error, "Prediction Spread": prediction_spread, "Prediction IQR": prediction_IQR, "Prediction Range": prediction_range}
-        global_confidence_dict = {}
-        NH_cofidence_dict = {}
-        regional_cofidence_dict = {"Analog Match": regional_analog_match_error, "Prediction Spread": regional_prediction_spread, "Prediction IQR": regional_IQR, "Prediction Range": regional_range}
-        random_confidence_dict = {}
-        climatol = error_climo
+        
+        #drop global for now:
+        #global_confidence_dict={}
+        NH_cofidence_dict={}
+        #regional_cofidence_dict={}
+        #global_confidence_dict={}
+        error_conf_dict = {"Network":(error_network, network_confidence_dict, "solid","red"), "Northern Hemisphere":(error_customcorr, NH_cofidence_dict, "dashed", "cornflowerblue"), "Global":(error_globalcorr, global_confidence_dict, "dotted", "palegreen"), "Regional":(error_corr, regional_cofidence_dict, "dashed", "navajowhite"), "Random":(np.array(error_random).T, random_confidence_dict, "dashdot", "gold")}
 
-    
-    #drop global for now:
-    #global_confidence_dict={}
-    NH_cofidence_dict={}
-    #regional_cofidence_dict={}
-    #global_confidence_dict={}
-    error_conf_dict = {"Network":(error_network, network_confidence_dict, "solid","red"), "Northern Hemisphere":(error_customcorr, NH_cofidence_dict, "dashed", "cornflowerblue"), "Global":(error_globalcorr, global_confidence_dict, "dotted", "palegreen"), "Regional":(error_corr, regional_cofidence_dict, "dashed", "navajowhite"), "Random":(np.array(error_random).T, random_confidence_dict, "dashdot", "gold")}
-
-    plots.confidence_plot(analogue_vector, error_conf_dict, settings, climatol)
+        plots.confidence_plot(analogue_vector, error_conf_dict, settings, climatol)
 
 
     # -----------------------
@@ -985,6 +1024,10 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
     # Dims should be num_analogs x num_samples
         error_network = error_network.T
         error_corr = error_corr.T
+        prediction_crps = prediction_crps.T
+        global_crps = global_crps.T
+        regional_crps = regional_crps.T
+        NH_crps = NH_crps.T
         if ignore_baselines:
             error_customcorr = np.ones((len_analogues, soi_input.shape[0])) * np.nan
             error_globalcorr = np.ones((len_analogues, soi_input.shape[0])) * np.nan
@@ -1024,8 +1067,21 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
             "error_custom": error_custom,
             "error_maxskill": error_maxskill,
         }
+        if type(error_climo_crps) != type(None):
+            crps_dict = { "analogue_vector": analogue_vector,
+                "error_random": np.ones_like(error_random)*np.nan,
+                "error_climo": error_climo_crps,
+                "error_persist": np.ones_like(error_persist)*np.nan,
+                "error_globalcorr": global_crps,
+                "error_corr": regional_crps,
+                "error_customcorr": NH_crps,
+                "error_network":  prediction_crps,
+                "error_custom": np.ones_like(error_custom)*np.nan,
+                "error_maxskill": np.ones_like(error_maxskill)*np.nan,}
+        else:
+            crps_dict = {}
 
-        # MAKE SUMMARY-SKILL PLOT
+        # MAKE MAE-SKILL PLOT
         plt.figure(figsize=(8, 4))
         plots.summarize_skill_score(metrics_dict, settings)
         plt.text(0.0, .99, ' ' + settings["savename_prefix"] + '\n smooth_time: [' + str(settings["smooth_len_input"])
@@ -1041,21 +1097,47 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
         else:
             plt.close()
 
-        return metrics_dict
+        # MAKE CRPS-SKILL PLOT
+        plt.figure(figsize=(8, 4))
+        plots.summarize_skill_score(crps_dict, settings, 1)
+        plt.text(0.0, .99, ' ' + settings["savename_prefix"] + '\n smooth_time: [' + str(settings["smooth_len_input"])
+                + ', ' + str(settings["smooth_len_output"]) + '], leadtime: ' + str(settings["lead_time"]),
+                fontsize=6, color="gray", va="top", ha="left", fontfamily="monospace", transform=plt.gca().transAxes)
+        plt.tight_layout()
+        if save_figure:
+            plt.savefig(dir_settings["figure_diag_directory"] + settings["savename_prefix"] +
+                        '_' + "CRPS" + '.png', dpi=dpiFig, bbox_inches='tight')
+            plt.close()
+        if show_figure:
+            plt.show()
+        else:
+            plt.close()
+
+        return metrics_dict, crps_dict
     else:
+        metrics_dict = {
+            "analogue_vector": analogue_vector,
+            "error_random": error_random,
+            "error_climo": error_climo,
+            "error_persist": error_persist,
+            "error_globalcorr": error_globalcorr,
+            "error_corr": error_corr,
+            "error_customcorr": error_customcorr,
+            "error_network": error_network,
+            "error_custom": error_custom,
+            "error_maxskill": error_maxskill,
+        }
         #all the errors I get will be of the form analogs x lat x lon,
         #so I want to input the analog vector for the title and the numpy arrays as weights, number of maps will always be 1, just
         #do a four loop where I save with the number of analogs in the name of the thing
         #also I will want to do the numpy subtraction of climatology to get a skill before passing it to my plot function
         #climo_tiled = np.broadcast_to(error_climo, np.shape(error_network))
         #error_persist = np.broadcast_to(error_persist, np.shape(error_network))
-        id = 0
-        nmid = 0
         error_network = np.array(error_network)
         error_corr = np.array(error_corr)
         error_customcorr = np.array(error_customcorr)
         error_globalcorr = np.array(error_globalcorr)
-        error_climo = np.mean(error_climo,axis=0)
+        error_climo = np.array(error_climo)
         error_random = np.mean(error_random,axis=0)
         skill_diff_net = np.mean(error_network,axis=0)[0]
         skill_diff_net = skill_diff_net-error_climo
@@ -1064,19 +1146,14 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
         skill_diff = skill_diff_net-skill_diff_corr
         #map_out = expand_maps(lat, lon, skill_diff, settings)
        #map_skill_plot(settings, map_out, lat, lon, 10, "skill difference between net and regional")
-        for error_type in [error_network, error_corr]:
-            nms = ["network", "regional"]
-            for an_number in analogue_vector:
-                print(np.shape(error_type))
-                error_i = np.mean(error_type,axis=0)[id]
-                skill_err = 1 - (error_i/error_climo)
-                skill_err = error_i
-                map_out = expand_maps(lat, lon, skill_err, settings)
-                map_out = error_i
-                map_skill_plot(settings, map_out, lat, lon, an_number, str(nms[nmid]))
-                id = id+1
-            nmid = nmid+1
-            id = 0
+        analog_idx = 3
+        net_err_i = np.mean(error_network,axis=0)[analog_idx]
+        for nmid, error_type in enumerate([error_climo, error_corr]):
+            nms = ["climatology", "regional"]
+            error_i = np.mean(error_type,axis=0)[analog_idx]
+            skill_err = 1 - (net_err_i/error_i)
+            map_out = expand_maps(lat, lon, skill_err, settings)
+            map_skill_plot(settings, map_out, lat, lon, settings["analogue_vec"][analog_idx], str(nms[nmid]))
         print("#print maps of errors!")
 
 def retrieve_mask(model, settings, shape, setmaskedas=0.0):

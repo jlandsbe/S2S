@@ -21,7 +21,7 @@ if dir_settings["data_directory"].split("/")[1] != "Users":
     ct.config["data_dir"] = "/scratch/jlandsbe/cartopy_maps"
 mpl.rcParams["figure.facecolor"] = "white"
 mpl.rcParams["figure.dpi"] = 150
-plt.style.use("seaborn-v0_8")
+#plt.style.use("seaborn-v0_8")
 dpiFig = 300
 
 def prepare_device(device="gpu"):

@@ -71,8 +71,8 @@ def get_region_dict(region=None):
         },
 
         "n_atlantic" :{
-            "lat_range":[0., 50.],
-            "lon_range":[360.-70., 360-15],
+            "lat_range":[30., 60.],
+            "lon_range":[360.-70., 360],
         },
         "n_pacific" :{
             "lat_range":[0., 65.],
@@ -112,6 +112,11 @@ def get_region_dict(region=None):
           "midwest" :{          
                 "lat_range":[36., 49.],
                 "lon_range":[254., 270.],
+             },
+
+            "cont_us" :{          
+                "lat_range":[25., 48.],
+                "lon_range":[360.-124., 360.-44.],
              },
           }
 

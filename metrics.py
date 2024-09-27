@@ -10,6 +10,7 @@ import tensorflow as tf
 import build_data
 import tensorflow_probability as tfp
 import scipy.stats
+import CRPS
 
 __author__ = "Jamin K. Rader, Elizabeth A. Barnes, and Randal J. Barnes"
 __version__ = "30 March 2023"
@@ -51,22 +52,22 @@ def field_operation(inputs):
             results.append(get_analog_errors(inputs["soi_output_sample"], np.mean(inputs["analog_output"][i_analogs[:n_analogs]], axis=0), "field"))
         return np.stack(results, axis=0)
 
-def map_operation(inputs):
-    assert type(inputs["n_analogs"]) is not int # should be a list-type
-    i_analogs = compute_best_analogs(inputs, inputs["max_analogs"])
-    results = []
-    if inputs["uncertainties"]:
-        input_diff = []
-        output_spread = []
-        for n_analogs in inputs["n_analogs"]:
-            results.append(get_analog_errors(inputs["soi_output_sample"], np.mean(inputs["analog_output"][i_analogs[:n_analogs]], axis=0), "map"))
-            input_diff.append((np.mean((inputs["soi_input_sample"] - inputs["analog_input"][i_analogs[:n_analogs]])**2))**.5)
-            output_spread.append(np.mean(np.var(inputs["analog_output"][i_analogs[:n_analogs]],axis=0)))
-        return [np.stack(results, axis=0), np.stack(input_diff, axis=0), np.stack(output_spread, axis=0)]
-    else:
-        for n_analogs in inputs["n_analogs"]:
-            results.append(get_analog_errors(inputs["soi_output_sample"], np.mean(inputs["analog_output"][i_analogs[:n_analogs]], axis=0), "map"))
-        return np.stack(results, axis=0)
+# def map_operation(inputs):
+#     assert type(inputs["n_analogs"]) is not int # should be a list-type
+#     i_analogs = compute_best_analogs(inputs, inputs["max_analogs"])
+#     results = []
+#     if inputs["uncertainties"]:
+#         input_diff = []
+#         output_spread = []
+#         for n_analogs in inputs["n_analogs"]:
+#             results.append(get_analog_errors(inputs["soi_output_sample"], np.mean(inputs["analog_output"][i_analogs[:n_analogs]], axis=0), "map"))
+#             input_diff.append((np.mean((inputs["soi_input_sample"] - inputs["analog_input"][i_analogs[:n_analogs]])**2))**.5)
+#             output_spread.append(np.mean(np.var(inputs["analog_output"][i_analogs[:n_analogs]],axis=0)))
+#         return [np.stack(results, axis=0), np.stack(input_diff, axis=0), np.stack(output_spread, axis=0)]
+#     else:
+#         for n_analogs in inputs["n_analogs"]:
+#             results.append(get_analog_errors(inputs["soi_output_sample"], np.mean(inputs["analog_output"][i_analogs[:n_analogs]], axis=0), "map"))
+#         return np.stack(results, axis=0)
 
 def map_operation2(inputs):
     assert type(inputs["n_analogs"]) is not int # should be a list-type
@@ -109,24 +110,68 @@ def mse_operation(inputs):
         input_diff = []
         output_spread = []
         output_IQR = []
-        output_range = []
+        output_min = []
+        output_max = []
+        crps = []
         for n_analogs in inputs["n_analogs"]:
             results.append(get_analog_errors(inputs["soi_output_sample"], np.mean(inputs["analog_output"][i_analogs[:n_analogs]]), "mse"))
+            crps.append((CRPS.CRPS(inputs["analog_output"][i_analogs[:n_analogs]],inputs["soi_output_sample"])).compute()[0])
             input_diff.append((np.mean((inputs["soi_input_sample"] - inputs["analog_input"][i_analogs[:n_analogs]])**2))**.5)
             output_spread.append(np.mean(np.var(inputs["analog_output"][i_analogs[:n_analogs]],axis=0)))
             output_IQR.append(np.subtract(*np.percentile(inputs["analog_output"][i_analogs[:n_analogs]], [75, 25], axis=0)))
-            output_range.append(np.ptp(inputs["analog_output"][i_analogs[:n_analogs]], axis=0))
+            output_min.append(np.min(inputs["analog_output"][i_analogs[:n_analogs]], axis=0))
+            output_max.append(np.max(inputs["analog_output"][i_analogs[:n_analogs]], axis=0))
             # If current n_analogs is max_analogs, set flag to return i_analogs
 
         return (np.stack(results, axis=0), 
                 np.stack(input_diff, axis=0), 
                 np.stack(output_spread, axis=0), 
                 np.stack(output_IQR, axis=0), 
-                np.stack(output_range, axis=0),
+                np.stack(output_min, axis=0),
+                np.stack(output_max, axis=0),
+                np.stack(crps, axis=0),
                 i_analogs) 
     else:
         for n_analogs in inputs["n_analogs"]:
             results.append(get_analog_errors(inputs["soi_output_sample"], np.mean(inputs["analog_output"][i_analogs[:n_analogs]]), "mse"))
+        return np.stack(results, axis=0)
+    
+def map_operation(inputs):
+    if not isinstance(inputs["n_analogs"], list):
+        raise ValueError("'n_analogs' should be a list.")
+    if type(inputs["best_analogs"]) == type(None):
+        i_analogs = compute_best_analogs(inputs, inputs["max_analogs"])
+    else:
+        i_analogs = inputs["best_analogs"]
+    results = []
+    if inputs["uncertainties"]:
+        input_diff = []
+        output_spread = []
+        output_IQR = []
+        output_min = []
+        output_max = []
+        crps = []
+        for n_analogs in inputs["n_analogs"]:
+            err = get_analog_errors(inputs["soi_output_sample"], np.mean(inputs["analog_output"][i_analogs[:n_analogs]], axis=0), "map")
+            results.append(err)
+            nan_array = np.ones_like(err)*np.nan
+            crps.append(nan_array)
+            input_diff.append(nan_array)
+            output_spread.append(nan_array)
+            output_IQR.append(nan_array)
+            output_min.append(nan_array)
+            output_max.append(nan_array)
+        return (np.stack(results, axis=0), 
+                np.stack(input_diff, axis=0), 
+                np.stack(output_spread, axis=0), 
+                np.stack(output_IQR, axis=0), 
+                np.stack(output_min, axis=0),
+                np.stack(output_max, axis=0),
+                np.stack(crps, axis=0),
+                i_analogs) 
+    else:
+        for n_analogs in inputs["n_analogs"]:
+            results.append(get_analog_errors(inputs["soi_output_sample"], np.mean(inputs["analog_output"][i_analogs[:n_analogs]], axis=0), "map"))
         return np.stack(results, axis=0)
 
 def super_classification_operation(inputs):
