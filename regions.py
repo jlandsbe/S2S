@@ -35,9 +35,14 @@ def get_region_dict(region=None):
         },
 
         "western_us": {
-            "lat_range": [30, 49],
+            "lat_range": [31, 49],
             "lon_range": [360-125, 360-110],
         },
+        "california": {
+            "lat_range": [32, 37],
+            "lon_range": [360-121, 360-116],
+        },
+
 
         "india": {
             "lat_range": [10, 30],
@@ -116,8 +121,12 @@ def get_region_dict(region=None):
 
             "cont_us" :{          
                 "lat_range":[25., 48.],
-                "lon_range":[360.-124., 360.-44.],
+                "lon_range":[360.-124., 360.-70.],
              },
+            "n_atlantic_ext" :{
+                "lat_range":[30., 60.],
+                "lon_range":[360.-82., 360],
+        },
           }
 
     if region is None:

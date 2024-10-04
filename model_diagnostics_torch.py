@@ -36,7 +36,7 @@ dpiFig = 300
 def visualize_metrics(settings, model, soi_input, soi_output, analog_input, analog_output, progression_analogs, progression_soi,
                       lat, lon, mask, persist_err=0, n_testing_analogs=1_000, n_testing_soi=1_000,
                       analogue_vector=None, fig_savename="", analog_dates = None, soi_dates = None,
-                      soi_train_output=None, my_masks = None, gates = None):
+                      soi_train_output=None, my_masks = None, gates = None, percentile = 0):
     if analogue_vector is None:
         analogue_vector = [1, 2, 5, 10, 15, 20, 25, 30]
 
@@ -46,7 +46,17 @@ def visualize_metrics(settings, model, soi_input, soi_output, analog_input, anal
     n_testing_analogs = np.min([analog_input.shape[0], n_testing_analogs])
     # get random analogs
     i_analog = rng_eval.choice(np.arange(0, analog_input.shape[0]), n_testing_analogs, replace=False)
-    i_soi = rng_eval.choice(np.arange(0, soi_input.shape[0]), n_testing_soi, replace=False)
+    if percentile != 0:
+        if percentile < 0:
+            percentile_value = np.percentile(soi_output, -percentile)
+            # Find the indices of soi_output that are less than or equal to the percentile value
+            i_soi = np.where(soi_output <= percentile_value)[0]
+        else:
+            percentile_value = np.percentile(soi_output, percentile)
+    # Find the indices of soi_output that are greater than or equal to the percentile value
+            i_soi = np.where(soi_output >= percentile_value)[0]
+    else:
+        i_soi = rng_eval.choice(np.arange(0, soi_input.shape[0]), n_testing_soi, replace=False)
     if type(analog_dates) != type(None):
         analog_dates = analog_dates[i_analog]
     if type(soi_dates) != type(None):
@@ -331,7 +341,7 @@ def create_subplots(random_soi_input, random_soi_output, selected_analogs, selec
     plt.close()
 
 def process_results(run_complex_operations, metrics_function, soi_iterable, pool, n_analogues, 
-                    soi_input_shape, metrics_directory, savename_prefix, file_suffix, chunksize=5):
+                    soi_input_shape, metrics_directory, savename_prefix, file_suffix, chunksize=1):
     """
     Runs the complex operations and processes the results, including appending errors and best analogs,
     saving the best analogs to a file, and returning error metrics.
@@ -631,7 +641,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
 
     # -----------------------
     # Simple GLOBAL correlation baseline
-    if not ignore_baselines:
+    if not ignore_baselines or 1:
         with Pool(n_processes) as pool:
             sqrt_area_weights = np.sqrt(np.abs(np.cos(np.deg2rad(lat)))[np.newaxis, :, np.newaxis, np.newaxis])
             best_global_analogs_path = dir_settings["metrics_directory"]+settings["savename_prefix"] + '_best_global_analogs.pickle'
@@ -649,14 +659,14 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                                                 soi_output,
                                                 analog_input,
                                                 analog_output,
-                                                sqrt_area_weights, best__global_analogs, uncertainties=1, val_analog_output=analog_output_val, val_soi_output=soi_output_val, progression_analog=progression_analog, progression_soi=progression_soi)
+                                                sqrt_area_weights, best_global_analogs, uncertainties=1, val_analog_output=analog_output_val, val_soi_output=soi_output_val, progression_analog=progression_analog, progression_soi=progression_soi)
             else:
                 soi_iterable_instance = soi_iterable(n_analogues,
                                                 soi_input,
                                                 soi_output,
                                                 analog_input,
                                                 analog_output,
-                                                sqrt_area_weights, best__global_analogs, progression_analog=progression_analog, progression_soi=progression_soi)
+                                                sqrt_area_weights, best_global_analogs, progression_analog=progression_analog, progression_soi=progression_soi)
             if settings["median"] or settings["percentiles"]!=None:
                 glob_err = np.array(run_complex_operations(metrics.super_classification_operation,
                                                                 soi_iterable_instance,
@@ -744,7 +754,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
             regional_range, regional_crps = process_results(
             run_complex_operations, metrics.map_operation, soi_iterable_instance, pool, 
             n_analogues, soi_input.shape, dir_settings["metrics_directory"], 
-            settings["savename_prefix"], "global")
+            settings["savename_prefix"], "regional")
         elif settings["error_calc"] == "classify":
             error_corr[:, :] = run_complex_operations(metrics.classification_operation,
                                                             soi_iterable_instance,
@@ -761,7 +771,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
             regional_range, regional_crps = process_results(
             run_complex_operations, metrics.mse_operation, soi_iterable_instance, pool, 
             n_analogues, soi_input.shape, dir_settings["metrics_directory"], 
-            settings["savename_prefix"], "global")
+            settings["savename_prefix"], "regional")
             
         print("finished target region error")
         
@@ -966,6 +976,8 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
     # Persistence
     #persist_true, persist_pred = metrics.calc_persistence_baseline(soi_output, settings)
     error_persist = np.repeat(np.array([persist_err]), len_analogues)
+    if settings["extremes_percentile"] !=0:
+        error_persist = error_persist * np.nan
 
     ### Printing the amount of time it took
     time_end = time.perf_counter()
@@ -1148,13 +1160,14 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
        #map_skill_plot(settings, map_out, lat, lon, 10, "skill difference between net and regional")
         analog_idx = 3
         net_err_i = np.mean(error_network,axis=0)[analog_idx]
-        for nmid, error_type in enumerate([error_climo, error_corr]):
-            nms = ["climatology", "regional"]
+        for nmid, error_type in enumerate([error_climo, error_corr, error_globalcorr]):
+            nms = ["climatology", "regional", "global"]
             error_i = np.mean(error_type,axis=0)[analog_idx]
             skill_err = 1 - (net_err_i/error_i)
             map_out = expand_maps(lat, lon, skill_err, settings)
             map_skill_plot(settings, map_out, lat, lon, settings["analogue_vec"][analog_idx], str(nms[nmid]))
         print("#print maps of errors!")
+        return metrics_dict,{}
 
 def retrieve_mask(model, settings, shape, setmaskedas=0.0):
     weighted_mask = model.get_layer('mask_model').get_layer("weights_layer").bias.numpy()

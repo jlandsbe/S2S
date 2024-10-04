@@ -18,6 +18,28 @@ from datetime import timedelta
 import regionmask
 import gc
 
+import os
+import grp
+import os
+import grp
+
+# Get your user ID
+user_id = os.getuid()
+
+# Get your username from the environment
+user_name = os.environ.get('USER') or os.environ.get('LOGNAME')
+
+# Fetch the groups you're part of
+groups = [g.gr_name for g in grp.getgrall() if user_name in g.gr_mem]
+
+# Also include your primary group
+primary_group = grp.getgrgid(os.getgid()).gr_name
+groups.append(primary_group)
+
+print(f"User {user_name} belongs to the following groups: {groups}")
+
+print(f"User {user_name} belongs to the following groups: {groups}")
+
 __author__ = "Jamin K. Rader, Elizabeth A. Barnes, Randal J. Barnes, and Jacob Landsberg"
 __version__ = "June 2023"
 
@@ -503,7 +525,11 @@ def get_netcdf(var, data_directory, settings, members = [], obs_fn = None, time_
             member_text =  "CMIP6.LE2-"+ member_text[1:]
         print('   ensemble member = ' + member_text)
         #fp = dir_settings["net_data"] + "/" + "Monthly_Temp/" + member_text + "." + var + ".1850-2100.shifted.nc" 
-        fp = dir_settings["net_data"] + "/" + "Detrended_" + var +"/" + member_text + "." + var + ".1850-2100.shifted.nc" 
+        fp = dir_settings["net_data"] + "/" + "Detrended_" + var +"/" + member_text + "." + var + ".1850-2100.shifted.nc"
+        print(os.listdir("/barnes-scratch/")) 
+        print(os.path.exists("/barnes-scratch/DATA/"))
+        print(os.path.exists(fp))
+
         if ens == "ERA5":
             da = xr.open_dataset(fp)['__xarray_dataarray_variable__'].squeeze()
             da = da.convert_calendar("standard", use_cftime=True)

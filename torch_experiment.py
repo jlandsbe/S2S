@@ -364,7 +364,7 @@ def train_experiments(
                                                                         n_testing_analogs=int(analog_input.shape[0]*settings["percent_analog"]),
                                                                         analogue_vector = settings["analogue_vec"],
                                                                         soi_train_output = None,
-                                                                        fig_savename="subset_skill_score_vs_nanalogues", gates=gates)
+                                                                        fig_savename="subset_skill_score_vs_nanalogues", gates=gates, percentile = settings["extremes_percentile"])
                     else:
                         metrics_dict, crps_dict = model_diagnostics_torch.visualize_metrics(settings, model, soi_test_input, soi_test_output,
                                                                         analog_input, analog_output, np.array(progression_analogs), np.array(progression_soi), lat,
@@ -373,7 +373,7 @@ def train_experiments(
                                                                         n_testing_analogs=int(analog_input.shape[0]*settings["percent_analog"]),
                                                                         analogue_vector = settings["analogue_vec"],
                                                                         soi_train_output = None,
-                                                                        fig_savename="subset_skill_score_vs_nanalogues", analog_dates = analog_dates, soi_dates = soi_dates)
+                                                                        fig_savename="subset_skill_score_vs_nanalogues", analog_dates = analog_dates, soi_dates = soi_dates, percentile = settings["extremes_percentile"])
 
                     # SAVE THE METRICS
                     print("almost at the end")

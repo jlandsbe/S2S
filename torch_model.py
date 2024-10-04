@@ -55,6 +55,9 @@ class CustomDataset(torch.utils.data.Dataset):
             self.analog_all_tethers = torch.cat((self.analog_output.unsqueeze(0), self.analog_tethers), dim=0)
             self.soi_all_tethers = torch.cat((self.soi_output.unsqueeze(0), self.soi_tethers), dim=0)
         torch.manual_seed(rng_seed)
+                # Calculate min and max of soi_output for normalization
+        self.soi_output_min = self.soi_output.min()
+        self.soi_output_max = self.soi_output.max()
         
     def __len__(self):
         return max(len(self.soi_input),len(self.analog_input))
@@ -70,8 +73,10 @@ class CustomDataset(torch.utils.data.Dataset):
         if self.analog_tethers.shape[0] > 0:
             err = torch.mean((self.soi_all_tethers[:,soi_idx] - self.analog_all_tethers[:,analog_idx]**2))
         else:
+            soi_out = self.soi_output[soi_idx]
+            soi_out_normalized = 2 * (soi_out - self.soi_output_min) / (self.soi_output_max - self.soi_output_min)
             err = torch.mean((self.soi_output[soi_idx] - self.analog_output[analog_idx])**2)
-        return self.soi_input[soi_idx], self.analog_input[analog_idx], err
+        return self.soi_input[soi_idx], self.analog_input[analog_idx], err, soi_out_normalized
     
 class TorchModel_base(nn.Module):
     def __init__(self, settings, input_dim1):
@@ -451,7 +456,7 @@ class MaskTrainer(BaseTrainer):
         self.model.train()
         self.batch_log.reset()
 
-        for batch_idx, (soi, analog, target) in enumerate(self.data_loader):
+        for batch_idx, (soi, analog, target, soi_out) in enumerate(self.data_loader):
             if batch_idx >= int(self.settings["max_iterations"]/self.settings["batch_size"])-1:
                 break
             soi_input, analog_input, target = (
@@ -469,11 +474,17 @@ class MaskTrainer(BaseTrainer):
 
             # Compute the loss and its gradients
             target = target.view(-1, 1)
+            soi_out = soi_out.view(-1, 1)
             losses = self.criterion(output, target)
             if self.settings["weighted_train"] != 0:
                 weights =  ((1/(target + 1e-8))**self.settings["weighted_train"])
             else:
                 weights = torch.ones_like(target)
+            if self.settings["extremes_weight"]>0:
+                if self.settings["extremes_percentile"] > 0:
+                    weights = weights**self.settings["extremes_weight"] * (soi_out > 1.0) * 1.0
+                elif self.settings["extremes_percentile"] < 0:
+                    weights = weights**self.settings["extremes_weight"] * (1/soi_out)
             weights = weights/weights.mean()
             weighted_losses = losses * weights
             loss = weighted_losses.mean()
@@ -508,7 +519,7 @@ class MaskTrainer(BaseTrainer):
         """
         self.model.eval()
         with torch.no_grad():
-            for batch_idx, (soi, analog, target) in enumerate(self.validation_data_loader):
+            for batch_idx, (soi, analog, target, soi_out) in enumerate(self.validation_data_loader):
                 if batch_idx >= int(self.settings["max_iterations"]/self.settings["val_batch_size"])-1:
                     break
                 soi_input, analog_input, target = (
@@ -524,11 +535,17 @@ class MaskTrainer(BaseTrainer):
 
                 # Compute the loss and its gradients
                 target = target.view(-1, 1)
+                soi_out = soi_out.view(-1, 1)
                 losses = self.criterion(output, target)
                 if self.settings["weighted_train"] != 0:
                     weights =  ((1/(target + 1e-8))**self.settings["weighted_train"])
                 else:
                     weights = torch.ones_like(target)
+                if self.settings["extremes_weight"]>0:
+                    if self.settings["extremes_percentile"] > 0:
+                        weights = weights**self.settings["extremes_weight"] * (soi_out > 1.0) *1.0
+                    elif self.settings["extremes_percentile"] < 0:
+                        weights = weights**self.settings["extremes_weight"] * (1/soi_out)
                 weights = weights/weights.mean()
                 weighted_losses = losses * weights
                 loss = weighted_losses.mean()
