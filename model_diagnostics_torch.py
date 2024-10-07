@@ -653,20 +653,12 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                 # Load the array from the pickle file
                 with open(best_global_analogs_path, 'rb') as file:
                     best_global_analogs = pickle.load(file)
-            if settings["median"] or settings["error_calc"]=="mse"or settings["percentiles"]!=None:
-                soi_iterable_instance = soi_iterable(n_analogues,
-                                                soi_input,
-                                                soi_output,
-                                                analog_input,
-                                                analog_output,
-                                                sqrt_area_weights, best_global_analogs, uncertainties=1, val_analog_output=analog_output_val, val_soi_output=soi_output_val, progression_analog=progression_analog, progression_soi=progression_soi)
-            else:
-                soi_iterable_instance = soi_iterable(n_analogues,
-                                                soi_input,
-                                                soi_output,
-                                                analog_input,
-                                                analog_output,
-                                                sqrt_area_weights, best_global_analogs, progression_analog=progression_analog, progression_soi=progression_soi)
+            soi_iterable_instance = soi_iterable(n_analogues,
+                                            soi_input,
+                                            soi_output,
+                                            analog_input,
+                                            analog_output,
+                                            sqrt_area_weights, best_global_analogs, uncertainties=1, val_analog_output=analog_output_val, val_soi_output=soi_output_val, progression_analog=progression_analog, progression_soi=progression_soi)
             if settings["median"] or settings["percentiles"]!=None:
                 glob_err = np.array(run_complex_operations(metrics.super_classification_operation,
                                                                 soi_iterable_instance,
