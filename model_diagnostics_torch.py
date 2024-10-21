@@ -389,10 +389,11 @@ def process_results(run_complex_operations, metrics_function, soi_iterable, pool
     prediction_IQR = net_err[:, 3, :]
     prediction_min = net_err[:, 4, :]
     prediction_max = net_err[:, 5, :]
-    prediction_CRPS = net_err[:, 6, :]
+    prediction_value = net_err[:, 6, :]
+    prediction_CRPS = net_err[:, 7, :]
     prediction_range = prediction_max - prediction_min
 
-    return error_network, analog_match_error, prediction_spread, prediction_IQR, prediction_min, prediction_max, prediction_range, prediction_CRPS
+    return error_network, analog_match_error, prediction_spread, prediction_IQR, prediction_min, prediction_max, prediction_range, prediction_value, prediction_CRPS
 
 def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                    analog_output, progression_analog, progression_soi, lat, lon,
@@ -565,7 +566,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                                                                     chunksize=soi_input.shape[0]//n_processes,)
                     elif settings["error_calc"] == "map":
                         #number of analogs x lat x lon
-                        error_network, analog_match_error, prediction_spread,prediction_IQR, prediction_min, prediction_max,prediction_range, prediction_crps = process_results(
+                        error_network, analog_match_error, prediction_spread,prediction_IQR, prediction_min, prediction_max,prediction_range, predicted_val, prediction_crps = process_results(
                             run_complex_operations, metrics.map_operation, soi_iterable_instance, pool, 
                             n_analogues, soi_input.shape, dir_settings["metrics_directory"], 
                             settings["savename_prefix"], "masked"
@@ -578,7 +579,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
 
                     else:
                         
-                        error_network, analog_match_error, prediction_spread,prediction_IQR, prediction_min, prediction_max,prediction_range, prediction_crps = process_results(
+                        error_network, analog_match_error, prediction_spread,prediction_IQR, prediction_min, prediction_max, prediction_range, predicted_val, prediction_crps = process_results(
                             run_complex_operations, metrics.mse_operation, soi_iterable_instance, pool, 
                             n_analogues, soi_input.shape, dir_settings["metrics_directory"], 
                             settings["savename_prefix"], "masked"
@@ -679,7 +680,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
             elif settings["error_calc"] == "map":
                 error_globalcorr, global_analog_match_error, global_prediction_spread, \
                 global_IQR, global_min, global_max, \
-                global_range, global_crps = process_results(
+                global_range, global_predicted_val, global_crps = process_results(
                 run_complex_operations, metrics.map_operation, soi_iterable_instance, pool, 
                 n_analogues, soi_input.shape, dir_settings["metrics_directory"], 
                 settings["savename_prefix"], "global")
@@ -691,7 +692,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
             else:
                 error_globalcorr, global_analog_match_error, global_prediction_spread, \
                 global_IQR, global_min, global_max, \
-                global_range, global_crps = process_results(
+                global_range, global_predicted_val, global_crps = process_results(
                 run_complex_operations, metrics.mse_operation, soi_iterable_instance, pool, 
                 n_analogues, soi_input.shape, dir_settings["metrics_directory"], 
                 settings["savename_prefix"], "global")
@@ -743,7 +744,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
         elif settings["error_calc"] == "map":
             error_corr, regional_analog_match_error, regional_prediction_spread, \
             regional_IQR, regional_min, regional_max, \
-            regional_range, regional_crps = process_results(
+            regional_range, regional_predicted_val, regional_crps = process_results(
             run_complex_operations, metrics.map_operation, soi_iterable_instance, pool, 
             n_analogues, soi_input.shape, dir_settings["metrics_directory"], 
             settings["savename_prefix"], "regional")
@@ -760,7 +761,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
         else:
             error_corr, regional_analog_match_error, regional_prediction_spread, \
             regional_IQR, regional_min, regional_max, \
-            regional_range, regional_crps = process_results(
+            regional_range, regional_predicted_val, regional_crps = process_results(
             run_complex_operations, metrics.mse_operation, soi_iterable_instance, pool, 
             n_analogues, soi_input.shape, dir_settings["metrics_directory"], 
             settings["savename_prefix"], "regional")
@@ -826,7 +827,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
             else:
                 error_customcorr, NH_analog_match_error, NH_prediction_spread, \
                 NH_IQR, NH_min, NH_max, \
-                NH_range, NH_crps = process_results(
+                NH_range, NH_predicted_val, NH_crps = process_results(
                 run_complex_operations, metrics.mse_operation, soi_iterable_instance, pool, 
                 n_analogues, soi_input.shape, dir_settings["metrics_directory"], 
                 settings["savename_prefix"], "global")
@@ -873,7 +874,20 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
     if settings['median'] or settings["percentiles"]!=None:
         error_climo = np.repeat(np.array([1]), len_analogues)
     elif settings["error_calc"] == "map":
+        # Calculate climatological error (mean over analogs)
         error_climo = metrics.get_analog_errors(soi_output, np.mean(analog_output, axis=0), settings["error_calc"])
+        
+        # Initialize CRPS grid with NaNs
+        error_climo_crps = np.full_like(error_climo, np.nan)
+        
+        
+        # Loop through each sample/time index
+        for idx, soi_output_ind in enumerate(soi_output):
+            error_climo_crps[idx] = np.array([
+                [CRPS.CRPS(analog_output[:, lat, lon], soi_output_ind[lat, lon]).compute()[0]
+                for lon in range(error_climo_crps.shape[2])]  # assuming lat/lon are the 1st and 2nd dimensions
+                for lat in range(error_climo_crps.shape[1])
+            ])
     else:
         error_climo_crps = np.zeros((soi_input.shape[0])) * np.nan
         for idx, soi_output_ind in enumerate(soi_output):
@@ -959,7 +973,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
         NH_cofidence_dict={}
         #regional_cofidence_dict={}
         #global_confidence_dict={}
-        error_conf_dict = {"Network":(error_network, network_confidence_dict, "solid","red"), "Northern Hemisphere":(error_customcorr, NH_cofidence_dict, "dashed", "cornflowerblue"), "Global":(error_globalcorr, global_confidence_dict, "dotted", "palegreen"), "Regional":(error_corr, regional_cofidence_dict, "dashed", "navajowhite"), "Random":(np.array(error_random).T, random_confidence_dict, "dashdot", "gold")}
+        error_conf_dict = {"Network":(error_network, network_confidence_dict, "solid","#2A9D8F"), "Northern Hemisphere":(error_customcorr, NH_cofidence_dict, "dashed", "#E9C46A"), "Global":(error_globalcorr, global_confidence_dict, "dotted", "#F4A261"), "Regional":(error_corr, regional_cofidence_dict, "dashed", "#E76F51"), "Random":(np.array(error_random).T, random_confidence_dict, "dashdot", "black")}
 
         plots.confidence_plot(analogue_vector, error_conf_dict, settings, climatol)
 
@@ -978,7 +992,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
 
         # -----------------------
     # Max Skill
-    if len(np.shape(soi_output)) > 1 and ignore_baselines == False:
+    if len(np.shape(soi_output)) > 1:
         error_maxskill = np.zeros((len_analogues, soi_input.shape[0])).T * np.nan
         with Pool(n_processes) as pool:
             no_weights = np.ones(np.shape(soi_output[:,:,:,np.newaxis])[1:])
@@ -1034,7 +1048,8 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
         NH_crps = NH_crps.T
         if ignore_baselines:
             error_customcorr = np.ones((len_analogues, soi_input.shape[0])) * np.nan
-            error_globalcorr = np.ones((len_analogues, soi_input.shape[0])) * np.nan
+            #error_globalcorr = np.ones((len_analogues, soi_input.shape[0])) * np.nan
+            error_globalcorr = error_globalcorr.T
             error_maxskill = np.zeros((len_analogues, soi_input.shape[0])) * np.nan
             error_random = np.zeros((len_analogues, soi_input.shape[0])) * np.nan
         else:
@@ -1088,9 +1103,9 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
         # MAKE MAE-SKILL PLOT
         plt.figure(figsize=(8, 4))
         plots.summarize_skill_score(metrics_dict, settings)
-        plt.text(0.0, .99, ' ' + settings["savename_prefix"] + '\n smooth_time: [' + str(settings["smooth_len_input"])
-                + ', ' + str(settings["smooth_len_output"]) + '], leadtime: ' + str(settings["lead_time"]),
-                fontsize=6, color="gray", va="top", ha="left", fontfamily="monospace", transform=plt.gca().transAxes)
+        # plt.text(0.0, .99, ' ' + settings["savename_prefix"] + '\n smooth_time: [' + str(settings["smooth_len_input"])
+        #         + ', ' + str(settings["smooth_len_output"]) + '], leadtime: ' + str(settings["lead_time"]),
+        #         fontsize=6, color="gray", va="top", ha="left", fontfamily="monospace", transform=plt.gca().transAxes)
         plt.tight_layout()
         if save_figure:
             plt.savefig(dir_settings["figure_diag_directory"] + settings["savename_prefix"] +
@@ -1131,6 +1146,20 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
             "error_custom": error_custom,
             "error_maxskill": error_maxskill,
         }
+
+        if type(error_climo_crps) != type(None):
+            crps_dict = { "analogue_vector": analogue_vector,
+                "error_random": np.ones_like(error_random)*np.nan,
+                "error_climo": error_climo_crps,
+                "error_persist": np.ones_like(error_persist)*np.nan,
+                "error_globalcorr": global_crps,
+                "error_corr": regional_crps,
+                "error_customcorr": NH_crps,
+                "error_network":  prediction_crps,
+                "error_custom": np.ones_like(error_custom)*np.nan,
+                "error_maxskill": np.ones_like(error_maxskill)*np.nan,}
+        else:
+            crps_dict = {}
         #all the errors I get will be of the form analogs x lat x lon,
         #so I want to input the analog vector for the title and the numpy arrays as weights, number of maps will always be 1, just
         #do a four loop where I save with the number of analogs in the name of the thing
@@ -1152,14 +1181,23 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
        #map_skill_plot(settings, map_out, lat, lon, 10, "skill difference between net and regional")
         analog_idx = 3
         net_err_i = np.mean(error_network,axis=0)[analog_idx]
-        for nmid, error_type in enumerate([error_climo, error_corr, error_globalcorr]):
-            nms = ["climatology", "regional", "global"]
+        for nmid, error_type in enumerate([error_climo, error_corr]):
+            nms = ["climatology", "regional"]
             error_i = np.mean(error_type,axis=0)[analog_idx]
             skill_err = 1 - (net_err_i/error_i)
             map_out = expand_maps(lat, lon, skill_err, settings)
             map_skill_plot(settings, map_out, lat, lon, settings["analogue_vec"][analog_idx], str(nms[nmid]))
         print("#print maps of errors!")
-        return metrics_dict,{}
+        if len(crps_dict) > 0:
+            net_err_i = np.mean(crps_dict["error_network"],axis=0)[analog_idx]
+            for nmid, error_type in enumerate([crps_dict["error_climo"], crps_dict["error_corr"]]):
+                nms = ["climatology", "regional"]
+                error_i = np.mean(error_type,axis=0)[analog_idx]
+                skill_err = 1 - (net_err_i/error_i)
+                map_out = expand_maps(lat, lon, skill_err, settings)
+                map_skill_plot(settings, map_out, lat, lon, settings["analogue_vec"][analog_idx], str(nms[nmid]), crps=1)
+        print("#print maps of CRPS!")
+        return metrics_dict, crps_dict
 
 def retrieve_mask(model, settings, shape, setmaskedas=0.0):
     weighted_mask = model.get_layer('mask_model').get_layer("weights_layer").bias.numpy()
@@ -1239,7 +1277,7 @@ def visualize_interp_model(settings, weights_train, lat, lon, sv="", clims =(0,0
                 ttl_text = "Mask for Channel " + str(imap)
             else:
                 ttl_text = str(imap) + " Branch Weight: " + str(ttl[imap])
-            ax, _ = plots.plot_interp_masks(fig, settings, weights_train[:, :, imap], lat=lat, lon=lon, central_longitude=215., climits = climits, title_text=ttl_text,subplot=(1, num_maps, imap + 1), )
+            ax, _ = plots.plot_interp_masks(fig, settings, weights_train[:, :, imap], lat=lat, lon=lon, central_longitude=215., climits = climits, title_text=ttl_text,subplot=(1, num_maps, imap + 1), use_text=0)
  # save the mask
         print(dir_settings["figure_directory"] + settings["savename_prefix"] +
                     '_averaged_masks.png')
@@ -1252,24 +1290,29 @@ def visualize_interp_model(settings, weights_train, lat, lon, sv="", clims =(0,0
             plt.savefig(dir_settings["figure_directory"] + settings["savename_prefix"] + sv +
                     '_averaged_masks.png', dpi=dpiFig, bbox_inches='tight')
         plt.close()
-def map_skill_plot(settings, weights_train, lat, lon, analog_vector, name):
+def map_skill_plot(settings, weights_train, lat, lon, analog_vector, name, extent_limit = 1, crps = 0):
     #expects shape of lat x lon x channels
     num_maps = 1
     ax = dict()
     fig = plt.figure(figsize=(7.5 * num_maps, 5))
-
+    sv_addition = ""
     # colorbar limits
     climits_dat = weights_train
-
+    if crps:
+        ttl = "CRPS Skill for " + name + " " + str(analog_vector) + ' analogs'
+        sv_addition = "_CRPS"
+    else:
+        ttl = "MSE Skill for " + name + " " + str(analog_vector) + ' analogs'
     climits = (-np.max([np.abs(np.quantile(climits_dat,.10)),np.quantile(climits_dat,.90)]), np.max([np.abs(np.quantile(climits_dat,.10)),np.quantile(climits_dat,.90)]))
     # plot the weighted mask
     for imap in range(num_maps):
-        ax, _ = plots.JBL_maps_plot(fig, settings, weights_train[:, :], lat=lat, lon=lon, central_longitude=215., climits = climits, title_text="MSE Skill for " + name + " " + str(analog_vector) + ' analogs',subplot=(1, num_maps, imap + 1))
+        ax, _ = plots.JBL_maps_plot(fig, settings, weights_train[:, :], lat=lat, lon=lon, central_longitude=215., climits = climits, title_text=ttl,subplot=(1, num_maps, imap + 1), extent_limit=extent_limit)
+
 
     # save the mask
     print(dir_settings["figure_directory"] + settings["savename_prefix"] + '_' + name + '_' + str(analog_vector) + 'analogs')
     plt.tight_layout()
-    plt.savefig(dir_settings["figure_directory"] + settings["savename_prefix"] + '_' + name + '_' + str(analog_vector) + '_analogs', dpi=dpiFig, bbox_inches='tight')
+    plt.savefig(dir_settings["figure_directory"] + settings["savename_prefix"] + '_' + name + '_' + str(analog_vector) + '_analogs' + sv_addition, dpi=dpiFig, bbox_inches='tight')
     plt.close()
 
 

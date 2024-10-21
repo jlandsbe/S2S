@@ -526,9 +526,6 @@ def get_netcdf(var, data_directory, settings, members = [], obs_fn = None, time_
         print('   ensemble member = ' + member_text)
         #fp = dir_settings["net_data"] + "/" + "Monthly_Temp/" + member_text + "." + var + ".1850-2100.shifted.nc" 
         fp = dir_settings["net_data"] + "/" + "Detrended_" + var +"/" + member_text + "." + var + ".1850-2100.shifted.nc"
-        print(os.listdir("/barnes-scratch/")) 
-        print(os.path.exists("/barnes-scratch/DATA/"))
-        print(os.path.exists(fp))
 
         if ens == "ERA5":
             da = xr.open_dataset(fp)['__xarray_dataarray_variable__'].squeeze()

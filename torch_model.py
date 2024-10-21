@@ -482,7 +482,7 @@ class MaskTrainer(BaseTrainer):
                 weights = torch.ones_like(target)
             if self.settings["extremes_weight"]>0:
                 if self.settings["extremes_percentile"] > 0:
-                    weights = weights**self.settings["extremes_weight"] * (soi_out > 1.0) * 1.0
+                    weights = weights**self.settings["extremes_weight"] * soi_out
                 elif self.settings["extremes_percentile"] < 0:
                     weights = weights**self.settings["extremes_weight"] * (1/soi_out)
             weights = weights/weights.mean()

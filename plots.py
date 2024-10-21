@@ -20,6 +20,7 @@ import matplotlib.pyplot as plt
 from shapely.ops import cascaded_union
 import palettable
 from matplotlib.colors import ListedColormap
+from matplotlib.colors import LinearSegmentedColormap
 import matplotlib.colors as colors
 import metrics
 from shapely.errors import ShapelyDeprecationWarning
@@ -30,6 +31,7 @@ import os
 import matplotlib.colors as mcol
 from scipy.stats import linregress
 import matplotlib.patheffects as pe
+from matplotlib.lines import Line2D
 
 warnings.filterwarnings(action='ignore', message='Mean of empty slice')
 warnings.filterwarnings(action='ignore', message='All-NaN slice encountered')
@@ -253,6 +255,8 @@ def summarize_errors(metrics_dict):
 def summarize_skill_score(metrics_dict, settings, crps = 0):
     marker_size = 15
     alpha = .8
+    max_values = []
+    min_values = []
     error_type = settings["error_calc"]
     x_plot = metrics.eval_function(metrics_dict["error_climo"])
     x_climatology_baseline = x_plot.copy()
@@ -264,47 +268,57 @@ def summarize_skill_score(metrics_dict, settings, crps = 0):
         
 
     
-    x_plot = metrics.eval_function(metrics_dict["error_maxskill"])
-    x_plot = 1. - skill_score_helper(x_plot, x_climatology_baseline, error_type)
-    plt.plot(metrics_dict["analogue_vector"], x_plot, '.-', markersize=marker_size, label='max skill',
-             color="yellowgreen", alpha=alpha)
+    # x_plot = metrics.eval_function(metrics_dict["error_maxskill"])
+    # x_plot = 1. - skill_score_helper(x_plot, x_climatology_baseline, error_type)
+    # plt.plot(metrics_dict["analogue_vector"], x_plot, '.-', markersize=marker_size, label='max skill',
+    #          color="yellowgreen", alpha=alpha)
+    # max_values.append(np.nanmax(x_plot))
+    # min_values.append(np.nanmin(x_plot))
     if not np.isnan(metrics_dict["error_customcorr"]).any(): 
         x_plot = metrics.eval_function(metrics_dict["error_customcorr"])
         x_plot = 1. - skill_score_helper(x_plot, x_climatology_baseline, error_type)
         plt.plot(metrics_dict["analogue_vector"], x_plot, '.-', markersize=marker_size, label='N hemisphere',
                 color="palevioletred", alpha=alpha)
-    
+        max_values.append(np.nanmax(x_plot))
+        min_values.append(np.nanmin(x_plot))
     x_plot = metrics.eval_function(metrics_dict["error_corr"])
     x_plot = 1. - skill_score_helper(x_plot, x_climatology_baseline, error_type)
     plt.plot(metrics_dict["analogue_vector"], x_plot, '.-', markersize=marker_size, label='region corr.',
              color="orchid", alpha=alpha)
-    
-
+    max_values.append(np.nanmax(x_plot))
+    min_values.append(np.nanmin(x_plot))
     x_plot = metrics_dict["error_persist"]
     x_plot = 1. - skill_score_helper(x_plot, x_climatology_baseline, error_type)
     plt.plot(metrics_dict["analogue_vector"], x_plot, '.-', markersize=marker_size, label='persistence',
              color="saddlebrown", alpha=alpha)
-
+    max_values.append(np.nanmax(x_plot))
+    min_values.append(np.nanmin(x_plot))
     x_plot = metrics.eval_function(metrics_dict["error_globalcorr"])
     x_plot = 1. - skill_score_helper(x_plot, x_climatology_baseline, error_type)
     plt.plot(metrics_dict["analogue_vector"], x_plot, '.-', markersize=marker_size, label='global corr.',
              color="rosybrown", alpha=alpha)
-
-    x_plot = metrics.eval_function(metrics_dict["error_random"])
-    x_plot = 1. - skill_score_helper(x_plot, x_climatology_baseline, error_type)
-    plt.plot(metrics_dict["analogue_vector"], x_plot, '.-', markersize=marker_size, label='random',
-             color="gray", alpha=alpha)
-    
+    max_values.append(np.nanmax(x_plot))
+    min_values.append(np.nanmin(x_plot))
+    # x_plot = metrics.eval_function(metrics_dict["error_random"])
+    # x_plot = 1. - skill_score_helper(x_plot, x_climatology_baseline, error_type)
+    # plt.plot(metrics_dict["analogue_vector"], x_plot, '.-', markersize=marker_size, label='random',
+    #          color="gray", alpha=alpha)
+    # max_values.append(np.nanmax(x_plot))
+    # min_values.append(np.nanmin(x_plot))
     x_plot = metrics.eval_function(metrics_dict["error_network"])
     x_plot = 1. - skill_score_helper(x_plot, x_climatology_baseline, error_type)
     plt.plot(metrics_dict["analogue_vector"], x_plot, '.-', markersize=marker_size, label='masked analog',
              color="deepskyblue", alpha=alpha)
-
-    plt.ylabel('skill score')
-    plt.xlabel('number of analogues averaged')
+    max_values.append(np.nanmax(x_plot))
+    min_values.append(np.nanmin(x_plot))
+    plt.ylabel('Skill Score')
+    plt.xlabel('Number of Analogues Averaged')
     plt.xlim(0, np.max(metrics_dict["analogue_vector"])*1.01)
-
-    plt.ylim(-0.5, 1.0)
+    max_y_value = np.nanmax(max_values)
+    min_y_value = np.nanmin(min_values)
+    y_min_limit = min(0,max(min_y_value - 0.15, -.5))
+    y_max_limit = min(max_y_value + 0.25, 1)
+    plt.ylim(y_min_limit, y_max_limit)
     plt.grid(False)
     plt.legend(fontsize=8)
     if error_type == "field":
@@ -500,7 +514,8 @@ def plot_interp_masks(fig, settings, weights_train, lat, lon, region_bool=True, 
                                              )
                 # ax.add_patch(rect)
 
-        plt.title(title_text)
+       #plt.title(title_text)
+        plt.title("Weighting of Temperature for Midwest Prediction")
         if use_text:
             plt.text(0.01, .02, ' ' + settings["savename_prefix"] + '\n smooth_time: [' + str(settings["smooth_len_input"])
                     + ', ' + str(settings["smooth_len_output"]) + '], leadtime: ' + str(settings["lead_time"]),
@@ -511,10 +526,16 @@ def plot_interp_masks(fig, settings, weights_train, lat, lon, region_bool=True, 
         return ax, climits
 def JBL_maps_plot(fig, settings, weights_train, lat, lon, region_bool=True, climits=None, central_longitude=215.,
                       title_text=None, subplot=(1, 1, 1), cmap=None, use_text=True, edgecolor="turquoise", 
-                      cbarBool=True):
+                      cbarBool=True, extent_limit=0):
 #here weights_train is of shape lat x lon
     cmap = mpl.colormaps['PiYG']
-    cmap.set_bad(color="grey")
+    # Define your two hex colors
+    hex_color1 = "#E76F51"  # Red
+    hex_color2 = "#2A9D8F"  # Blue
+
+    # Create a diverging colormap
+    cmap = LinearSegmentedColormap.from_list("my_diverging_cmap", [hex_color1, "white", hex_color2])
+    cmap.set_bad(color=(233/255, 196/255, 106/255, .5))
     #cmap.set_under(color='white')
     if settings["maskout_landocean_input"] == "ocean":
         landfacecolor = "k"
@@ -547,8 +568,8 @@ def JBL_maps_plot(fig, settings, weights_train, lat, lon, region_bool=True, clim
                     cbarBool=cbarBool,
                     landfacecolor=landfacecolor,
                     )
+        reg = regions.get_region_dict(settings["target_region_name"])       
         if region_bool:
-            reg = regions.get_region_dict(settings["target_region_name"])
             rect = mpl.patches.Rectangle((reg["lon_range"][0], reg["lat_range"][0]),
                                          reg["lon_range"][1] - reg["lon_range"][0],
                                          reg["lat_range"][1] - reg["lat_range"][0],
@@ -587,6 +608,15 @@ def JBL_maps_plot(fig, settings, weights_train, lat, lon, region_bool=True, clim
                 # ax.add_patch(rect)
 
         plt.title(title_text)
+        if extent_limit:
+            # lon_min = max(reg["lon_range"][0]-15, 0) 
+            # lon_max = min(reg["lon_range"][1]+15, 360)
+            lon_min = (reg["lon_range"][0]-15 + 180) % 360 - 180
+            lon_max = (reg["lon_range"][1]+15 + 180) % 360 - 180
+            lat_min = max(reg["lat_range"][0]-15, -90)
+            lat_max = min(reg["lat_range"][1]+15, 90)
+            extent = [lon_min, lon_max, lat_min, lat_max]
+            ax.set_extent(extent, crs=ct.crs.PlateCarree())
         if use_text:
             plt.text(0.01, .02, ' ' + settings["savename_prefix"] + '\n avg skill: ' + str(avg_skill) + ' skill area: ' + str(area_skill) +"%",
                     fontsize=6, color="gray", va="bottom", ha="left", fontfamily="monospace", backgroundcolor="white",
@@ -929,16 +959,23 @@ def confidence_plot(analogue_vector, error_dictionary, settings, error_climotol 
                     cutoff_index = int(len(x_data) * (p / 100))
                     y_subset_x = y_sorted_by_x[:cutoff_index]
                     y_means_x.append(np.mean(y_subset_x))
-                label_name =  label_name = f"{mask_type_name}: {confidence_name}"
+                label_name = f"{mask_type_name}: {confidence_name}"
                 if type(error_climotol) == type(None):
                     plt.plot(percentages, 100*(1-np.array(y_means_x)), linestyle=line_type, linewidth = 4, color=shades[i], label=label_name, alpha = .8)
                     plt.ylabel('Percent Accuracy', fontsize=14)
                 else:
                     plt.plot(percentages, np.array(y_means_x), linestyle=line_type, linewidth = 4, color=shades[i], label=label_name, alpha = .8)
+
                     plt.ylabel('Error', fontsize=14)
+        if error_climotol is not None:
+            # Plot a horizontal line marker (dash) at the point (90, mean of error_climotol)
+           plt.axhline(y=np.mean(error_climotol), color='black', linestyle='--', linewidth=2, label='Average Climatological Error')
+                # Add custom legend entry for the arrow
+        plt.legend(fontsize=8)
         plt.xlabel('Percent Most Confident', fontsize=14)
         plt.title('Discard Plot for Prediction Spread (' + str(analogue_vector[analog_idx]) + " analogs)", fontsize=16)
-        ax.legend(loc="upper left")
+        # Create a custom legend entry for the arrow
+        
         ax = plt.gca()
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)

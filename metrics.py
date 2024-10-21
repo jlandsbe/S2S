@@ -113,8 +113,11 @@ def mse_operation(inputs):
         output_min = []
         output_max = []
         crps = []
+        actual_prediction = []
         for n_analogs in inputs["n_analogs"]:
-            results.append(get_analog_errors(inputs["soi_output_sample"], np.mean(inputs["analog_output"][i_analogs[:n_analogs]]), "mse"))
+            predicted_val = np.mean(inputs["analog_output"][i_analogs[:n_analogs]])
+            actual_prediction.append(predicted_val)
+            results.append(get_analog_errors(inputs["soi_output_sample"], predicted_val, "mse"))
             crps.append((CRPS.CRPS(inputs["analog_output"][i_analogs[:n_analogs]],inputs["soi_output_sample"])).compute()[0])
             input_diff.append((np.mean((inputs["soi_input_sample"] - inputs["analog_input"][i_analogs[:n_analogs]])**2))**.5)
             output_spread.append(np.mean(np.var(inputs["analog_output"][i_analogs[:n_analogs]],axis=0)))
@@ -129,6 +132,7 @@ def mse_operation(inputs):
                 np.stack(output_IQR, axis=0), 
                 np.stack(output_min, axis=0),
                 np.stack(output_max, axis=0),
+                np.stack(actual_prediction, axis=0),
                 np.stack(crps, axis=0),
                 i_analogs) 
     else:
@@ -150,23 +154,34 @@ def map_operation(inputs):
         output_IQR = []
         output_min = []
         output_max = []
+        actual_prediction = []
         crps = []
+        nan_array = np.ones_like(inputs["soi_output_sample"])*np.nan
+        crps_grid = nan_array
         for n_analogs in inputs["n_analogs"]:
-            err = get_analog_errors(inputs["soi_output_sample"], np.mean(inputs["analog_output"][i_analogs[:n_analogs]], axis=0), "map")
+            err = get_analog_errors(inputs["soi_output_sample"], np.mean(inputs["analog_output"][i_analogs[:n_analogs]], axis=0), "map") #shape is lat x lon and n_ans x lat x lon
             results.append(err)
-            nan_array = np.ones_like(err)*np.nan
-            crps.append(nan_array)
+    # Vectorized computation over all grid points
+            crps_grid = np.array([
+                [CRPS.CRPS(inputs["analog_output"][i_analogs[:n_analogs], lat, lon], 
+                        inputs["soi_output_sample"][lat, lon]).compute()[0]
+                for lon in range(crps_grid.shape[1])]
+                for lat in range(crps_grid.shape[0])
+            ])
+            crps.append(crps_grid)
             input_diff.append(nan_array)
             output_spread.append(nan_array)
             output_IQR.append(nan_array)
             output_min.append(nan_array)
             output_max.append(nan_array)
+            actual_prediction.append(nan_array)
         return (np.stack(results, axis=0), 
                 np.stack(input_diff, axis=0), 
                 np.stack(output_spread, axis=0), 
                 np.stack(output_IQR, axis=0), 
                 np.stack(output_min, axis=0),
                 np.stack(output_max, axis=0),
+                np.stack(actual_prediction, axis=0),
                 np.stack(crps, axis=0),
                 i_analogs) 
     else:

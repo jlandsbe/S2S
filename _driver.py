@@ -14,8 +14,8 @@ __author__ = "Jamin K. Rader, Elizabeth A. Barnes, and Randal J. Barnes"
 __version__ = "30 March 2023"
 
 # List of experiments to run
-EXP_NAME_LIST = ("natl_temp_wind_to_wind_winter_m12",)
-#EXP_NAME_LIST = ("california_temp_to_temp_week_summer_90th_weighted_sq",)
+#EXP_NAME_LIST = ("california_temp_z500_to_temp_week_summer_90th_weighted_obs",)
+EXP_NAME_LIST = ("midwest_month1_temp_temp_out_summer_obs",)
 if __name__ == "__main__":
 
     start_time = time.time()

@@ -186,6 +186,9 @@ def train_experiments(
             analog_dates,
             soi_dates, tether_analogs, tether_soi, progression_analogs, progression_soi
         ) = build_data.build_data(settings, data_directory)
+        if settings["exp_name"] == 'natl_ext_temp_wind_to_wind_winter_m1_obs_test':
+            soi_train_input = soi_test_input
+            soi_train_output = soi_test_output
         if settings["tethers"]==[]:
             tether_analogs = []
             tether_soi = []
@@ -244,13 +247,13 @@ def train_experiments(
                         trainset,
                         batch_size=settings["batch_size"],
                         shuffle=False,
-                        drop_last=False,
+                        drop_last=False
                     )
                         val_loader = DataLoader(
                         valset,
                         batch_size=settings["val_batch_size"],
                         shuffle=False,
-                        drop_last=False,
+                        drop_last=False
     )
                         model = TorchModel_base(settings, np.shape(soi_train_input)[1:])
                         criterion = torch.nn.MSELoss(reduction='none')
@@ -301,16 +304,6 @@ def train_experiments(
                                 else:
                                     weights_val = np.where(weights_val>=np.quantile(weights_val,settings["cutoff"]), weights_val, 0)
                                     # Number of rows in the array
-                                    num_rows = weights_val.shape[0]
-
-                                    # Calculate the third of the total number of rows
-                                    third = num_rows // 3
-
-                                    # Set the first third of rows to 0
-                                    weights_val[:third, :,:] = 0
-
-                                    # Set the last third of rows to 0
-                                    weights_val[-third:, :,:] = 0
                             if settings["gates"]:
                                 reg_map_na = np.zeros(np.shape(weights_val))
                                 reg_map_na = build_data.extract_region(reg_map_na, regions.get_region_dict("n_atlantic"), lat=lat, lon=lon, mask_builder = 1)

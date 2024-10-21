@@ -124,7 +124,7 @@ def get_region_dict(region=None):
                 "lon_range":[360.-124., 360.-70.],
              },
             "n_atlantic_ext" :{
-                "lat_range":[30., 60.],
+                "lat_range":[25., 65.],
                 "lon_range":[360.-82., 360],
         },
           }
