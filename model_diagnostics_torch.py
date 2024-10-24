@@ -341,7 +341,7 @@ def create_subplots(random_soi_input, random_soi_output, selected_analogs, selec
     plt.close()
 
 def process_results(run_complex_operations, metrics_function, soi_iterable, pool, n_analogues, 
-                    soi_input_shape, metrics_directory, savename_prefix, file_suffix, chunksize=1):
+                    soi_input_shape, metrics_directory, savename_prefix, file_suffix, chunksize=10):
     """
     Runs the complex operations and processes the results, including appending errors and best analogs,
     saving the best analogs to a file, and returning error metrics.
@@ -548,7 +548,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                         
 
  
-                    if settings["median"] or settings["percentiles"]!=None:
+                    if settings["median"] or settings["percentiles"]!=None and 0:
                         net_err = np.array(run_complex_operations(metrics.super_classification_operation,
                                                                     soi_iterable_instance,
                                                                     pool,
@@ -642,7 +642,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
 
     # -----------------------
     # Simple GLOBAL correlation baseline
-    if not ignore_baselines or 1:
+    if not ignore_baselines:
         with Pool(n_processes) as pool:
             sqrt_area_weights = np.sqrt(np.abs(np.cos(np.deg2rad(lat)))[np.newaxis, :, np.newaxis, np.newaxis])
             best_global_analogs_path = dir_settings["metrics_directory"]+settings["savename_prefix"] + '_best_global_analogs.pickle'
@@ -660,7 +660,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                                             analog_input,
                                             analog_output,
                                             sqrt_area_weights, best_global_analogs, uncertainties=1, val_analog_output=analog_output_val, val_soi_output=soi_output_val, progression_analog=progression_analog, progression_soi=progression_soi)
-            if settings["median"] or settings["percentiles"]!=None:
+            if settings["median"] or settings["percentiles"]!=None and 0:
                 glob_err = np.array(run_complex_operations(metrics.super_classification_operation,
                                                                 soi_iterable_instance,
                                                                 pool,
@@ -731,7 +731,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                                                 analog_reg,
                                                 analog_output,
                                                 sqrt_area_weights, best_region_analogs,uncertainties = 1, val_analog_output=analog_output_val, val_soi_output=soi_output_val, progression_analog=progression_analog_reg, progression_soi=progression_soi_reg)
-        if settings["median"] or settings["percentiles"]!=None:
+        if settings["median"] or settings["percentiles"]!=None and 0:
             error_corr_reg = np.array(run_complex_operations(metrics.super_classification_operation,
                                                             soi_iterable_instance,
                                                             pool,
@@ -783,7 +783,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
             # Load the array from the pickle file
                 with open(best_cust_analogs_path, 'rb') as file:
                     best_cust_analogs = pickle.load(file)
-            if settings["median"] or settings["error_calc"]=="mse" or settings["percentiles"]!=None:
+            if settings["median"] or settings["error_calc"]=="mse" or settings["percentiles"]!=None and 0:
                 soi_iterable_instance = soi_iterable(n_analogues,
                                                 soi_input,
                                                 soi_output,
@@ -797,7 +797,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                                                 analog_input,
                                                 analog_output,
                                                 cust_reg_map, best_cust_analogs, progression_analog=progression_analog, progression_soi=progression_soi)
-            if settings["median"] or settings["percentiles"]!=None:
+            if settings["median"] or settings["percentiles"]!=None and 0:
                 cust_err = np.array(run_complex_operations(metrics.super_classification_operation,
                                                             soi_iterable_instance,
                                                             pool,
@@ -849,7 +849,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
         for idx_analog, n_analog in enumerate(n_analogues):
             i_analogue = rng.choice(np.arange(0, analog_output.shape[0]),
                                     size=(n_analog, soi_output.shape[0]), replace=True)
-            if settings["median"] or settings["percentiles"]!=None:
+            if settings["median"] or settings["percentiles"]!=None and 0:
                 error_random[idx_analog, :] = np.mean((soi_output!=(scipy.stats.mode(analog_output[i_analogue], axis=0)).mode))
                 
             elif settings["error_calc"] == "map":
@@ -945,7 +945,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
 
     # -----------------------
         #Confidence Plots
-        if settings["median"] or settings["percentiles"]!=None:
+        if settings["median"] or settings["percentiles"]!=None and 0:
             network_confidence_dict = {"Analog Match": analog_match_error, "Prediction Spread": prediction_spread, "Modal Fraction":modal_fraction,"Entropy":entropy_spread}
             global_confidence_dict = {"Analog Match": global_analog_match_error, "Prediction Spread": global_prediction_spread, "Modal Fraction":global_modal_fraction,"Entropy":global_entropy_spread}
             NH_cofidence_dict = {"Analog Match": NH_analog_match_error, "Prediction Spread": NH_prediction_spread, "Modal Fraction":NH_modal_fraction,"Entropy":NH_entropy_spread}
@@ -1002,7 +1002,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                                                     analog_output[:,:,:,np.newaxis],
                                                     analog_output,
                                                     no_weights)
-            if settings["median"] or settings["percentiles"]!=None:
+            if settings["median"] or settings["percentiles"]!=None and 0:
                 error_maxskill[:, :] = run_complex_operations(metrics.super_classification_operation,
                                                                 soi_iterable_instance,
                                                                 pool,

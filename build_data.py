@@ -38,7 +38,7 @@ def build_data(settings, data_directory):
         analog_dates_savename = dir_settings["data_directory"] + data_exp_name + '_analog_dates' + '.pickle'
         soi_dates_savename = dir_settings["data_directory"] + data_exp_name + '_soi_dates' + '.pickle'
     else:
-        data_savename = dir_settings["data_directory"]+settings["presaved_data_filename"]
+        data_savename =  dir_settings["data_directory"]+ 'presaved_data_' + settings["presaved_data_filename"] + '.pickle'
         persist_savename = dir_settings["data_directory"]+settings["presaved_data_filename"] + '_persist_error.pickle'
         analog_dates_savename = dir_settings["data_directory"]+settings["presaved_data_filename"] + '_analog_dates.pickle'
         soi_dates_savename = dir_settings["data_directory"]+settings["presaved_data_filename"] + '_soi_dates.pickle'

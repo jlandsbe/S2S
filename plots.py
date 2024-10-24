@@ -514,8 +514,8 @@ def plot_interp_masks(fig, settings, weights_train, lat, lon, region_bool=True, 
                                              )
                 # ax.add_patch(rect)
 
-       #plt.title(title_text)
-        plt.title("Weighting of Temperature for Midwest Prediction")
+        plt.title(title_text)
+        #plt.title("Weighting of Temperature for Midwest Prediction")
         if use_text:
             plt.text(0.01, .02, ' ' + settings["savename_prefix"] + '\n smooth_time: [' + str(settings["smooth_len_input"])
                     + ', ' + str(settings["smooth_len_output"]) + '], leadtime: ' + str(settings["lead_time"]),

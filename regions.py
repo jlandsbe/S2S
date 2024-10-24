@@ -127,6 +127,10 @@ def get_region_dict(region=None):
                 "lat_range":[25., 65.],
                 "lon_range":[360.-82., 360],
         },
+        "california_ext": {
+            "lat_range": [32, 37],
+            "lon_range": [360-121, 360-103],
+        },
           }
 
     if region is None:
