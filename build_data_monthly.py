@@ -114,6 +114,19 @@ def build_data(settings, data_directory):
         #get the data for the SOIs to test on 
         if settings["split_soi"]:
             settings["years"] = (midpoint, year_0[1])
+
+        if settings["soi_test_members"][0] =="ERA5":
+            input_standard_dict = {
+                "ens_mean": None,
+                "data_mean": None,
+                "data_std": None,
+            }
+            output_standard_dict = {
+                "ens_mean": None,
+                "data_mean": None,
+                "data_std": None,
+            }
+        
         print('getting testing data...')
         soi_test_input, soi_test_output, __, __, persist_err, __, progressions_soi = process_input_output(
             data_directory, settings, members=settings["soi_test_members"], input_standard_dict=input_standard_dict,
@@ -527,11 +540,11 @@ def get_netcdf(var, data_directory, settings, members = [], obs_fn = None, time_
         #fp = dir_settings["net_data"] + "/" + "Monthly_Temp/" + member_text + "." + var + ".1850-2100.shifted.nc" 
         fp = dir_settings["net_data"] + "/" + "Detrended_" + var +"/" + member_text + "." + var + ".1850-2100.shifted.nc"
 
-        if ens == "ERA5":
-            da = xr.open_dataset(fp)['__xarray_dataarray_variable__'].squeeze()
-            da = da.convert_calendar("standard", use_cftime=True)
-        else:
-            da = xr.open_dataset(fp)[var].squeeze()
+        # if ens == "ERA5":
+        #     da = xr.open_dataset(fp)['__xarray_dataarray_variable__'].squeeze()
+        #     da = da.convert_calendar("standard", use_cftime=True)
+        # else:
+        da = xr.open_dataset(fp)[var].squeeze()
         da = da.fillna(0.0)
         if ens == "ERA5":
             da = da.convert_calendar("standard", use_cftime=True)

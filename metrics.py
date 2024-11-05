@@ -190,24 +190,40 @@ def map_operation(inputs):
         return np.stack(results, axis=0)
 
 def super_classification_operation(inputs):
-    assert type(inputs["n_analogs"]) is not int # should be a list-type
-    i_analogs = compute_best_analogs(inputs, inputs["max_analogs"])
+    if not isinstance(inputs["n_analogs"], list):
+        raise ValueError("'n_analogs' should be a list.")
+    if type(inputs["best_analogs"]) == type(None):
+        i_analogs = compute_best_analogs(inputs, inputs["max_analogs"])
+    else:
+        i_analogs = inputs["best_analogs"]
     results = []
     if inputs["uncertainties"]:
         input_diff = []
         output_spread = []
-        fraction_mode = []
-        entropy = []
+        output_IQR = []
+        output_min = []
+        output_max = []
+        actual_prediction = []
+        crps = []
+        nan_array = np.ones_like(inputs["soi_output_sample"])*np.nan
         for n_analogs in inputs["n_analogs"]:
-            results.append(np.mean(inputs["soi_output_sample"]!=(scipy.stats.mode(inputs["analog_output"][i_analogs[:n_analogs]], axis=0)).mode)) #fraction that were incorrect
-            input_diff.append((np.mean((inputs["soi_input_sample"] - inputs["analog_input"][i_analogs[:n_analogs]])**2))**.5)
-            output_spread.append(np.mean(np.var(inputs["val_analog_output"][i_analogs[:n_analogs]],axis=0))) #variance of actual values not percentile classes
-            fraction_mode.append(np.mean((scipy.stats.mode(inputs["analog_output"][i_analogs[:n_analogs]], axis=0)).count/len(i_analogs[:n_analogs]))) #this will return the fraction of analogs that guessed the most common class. A high value implies high certainty, a low value implies low certainty. 
-            if len(np.shape(inputs["analog_output"][i_analogs[:n_analogs]]))==1:
-                entropy.append(entropy_calc_1D(inputs["analog_output"][i_analogs[:n_analogs]]))
-            else:
-                entropy.append(np.mean(entropy_calc_3D(inputs["analog_output"][i_analogs[:n_analogs]])))
-        return np.stack(results, axis=0), np.stack(input_diff, axis=0), np.stack(output_spread, axis=0), np.stack(fraction_mode, axis=0), np.stack(entropy, axis=0)
+            results.append(inputs["soi_output_sample"]!=(scipy.stats.mode(inputs["analog_output"][i_analogs[:n_analogs]], axis=0)).mode) #fraction that were incorrect
+            input_diff.append(nan_array)
+            output_spread.append(nan_array)
+            output_IQR.append(nan_array)
+            output_min.append(nan_array)
+            output_max.append(nan_array)
+            actual_prediction.append(nan_array)
+            crps.append(nan_array)
+        return (np.stack(results, axis=0), 
+                np.stack(input_diff, axis=0), 
+                np.stack(output_spread, axis=0), 
+                np.stack(output_IQR, axis=0), 
+                np.stack(output_min, axis=0),
+                np.stack(output_max, axis=0),
+                np.stack(actual_prediction, axis=0),
+                np.stack(crps, axis=0),
+                i_analogs) 
     else:
         for n_analogs in inputs["n_analogs"]:
             results.append(np.mean(inputs["soi_output_sample"]!=(scipy.stats.mode(inputs["analog_output"][i_analogs[:n_analogs]], axis=0)).mode))
@@ -283,9 +299,15 @@ def get_persist_errors(soi, analog_prediction, type="mse"):
     else:
         raise Exception("Sorry, this error calculation type is not implemented.")
 
-def get_analog_errors(soi, analog_prediction, type="mse"):
+def get_analog_errors(soi, analog_prediction, type="mse", fractional = 0):
     if type=="classify":
         return get_analog_errors_pos_neg(soi, analog_prediction)
+    if fractional:
+        diff = np.abs(soi - analog_prediction)/np.abs(soi)
+        if type =="mse" and len(np.shape(diff))>1:
+            return np.average(diff, axis=(-1,-2))
+        else:
+            return diff
     if type=="mse":
         diff = (soi - analog_prediction)**2
         if len(np.shape(diff))>1:

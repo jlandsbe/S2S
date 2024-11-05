@@ -15,7 +15,10 @@ __version__ = "30 March 2023"
 
 # List of experiments to run
 #EXP_NAME_LIST = ("california_temp_z500_to_temp_week_summer_90th_weighted_obs",)
-EXP_NAME_LIST = ( "natl_ext_temp_wind_to_wind_winter_m14_obs","natl_ext_temp_wind_to_wind_winter_m12_obs","natl_ext_temp_wind_to_wind_winter_m1_obs")
+#EXP_NAME_LIST = ( "california_temp_to_temp_week_summer_90th_weighted_obs",)
+#EXP_NAME_LIST = ( "natl_ext_temp_wind_to_wind_winter_m14_obs_median","natl_ext_temp_wind_to_wind_winter_m12_obs_median","natl_ext_temp_wind_to_wind_winter_m1_obs_median")
+EXP_NAME_LIST = ( "midwest_month1_temp_prect_temp_out_summer_obs",)
+#EXP_NAME_LIST = ("california_temp_to_temp_week_summer_90th_weighted_obs","california_temp_to_temp_week_summer_90th_obs")
 if __name__ == "__main__":
 
     start_time = time.time()

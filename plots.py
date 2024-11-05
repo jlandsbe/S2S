@@ -253,6 +253,7 @@ def summarize_errors(metrics_dict):
 
 
 def summarize_skill_score(metrics_dict, settings, crps = 0):
+    plt.style.use("default")
     marker_size = 15
     alpha = .8
     max_values = []
@@ -316,8 +317,8 @@ def summarize_skill_score(metrics_dict, settings, crps = 0):
     plt.xlim(0, np.max(metrics_dict["analogue_vector"])*1.01)
     max_y_value = np.nanmax(max_values)
     min_y_value = np.nanmin(min_values)
-    y_min_limit = min(0,max(min_y_value - 0.15, -.5))
-    y_max_limit = min(max_y_value + 0.25, 1)
+    y_min_limit = min(0,max(min_y_value - 0.05, -.5))
+    y_max_limit = min(max_y_value + 0.1, 1)
     plt.ylim(y_min_limit, y_max_limit)
     plt.grid(False)
     plt.legend(fontsize=8)
@@ -543,8 +544,16 @@ def JBL_maps_plot(fig, settings, weights_train, lat, lon, region_bool=True, clim
         landfacecolor = "None"
     if cmap is None:
         cmap = get_mycolormap()
-    avg_skill = round(np.nanmean(weights_train),2)
-    area_skill = round((np.sum(weights_train>0)/np.sum(np.isfinite(weights_train)))*100,2)
+    avg_skill = round(np.nanmean(weights_train),3)
+        # Calculate the latitude weights
+    lat_weights = np.cos(np.deg2rad(lat))
+
+    # Normalize the latitude weights so they are an average of 1
+    lat_weights /= np.mean(lat_weights)
+
+    # Expand the latitude weights to match the shape of weights_train
+    lat_weights_2d = np.expand_dims(lat_weights, axis=1)
+    area_skill = round((np.sum((weights_train>0)*lat_weights_2d)/np.sum(np.isfinite(weights_train)*lat_weights_2d))*100,2)
     for channel in [0, 1]:
 
         if climits is None:
@@ -949,9 +958,13 @@ def confidence_plot(analogue_vector, error_dictionary, settings, error_climotol 
             for i, (confidence_name, confidence_values) in enumerate(confidence_dictionary.items()):
                 y_data = error[:, analog_idx]
                 x_data = confidence_values[:, analog_idx]
+                if confidence_name == "Predicted Extremity" or confidence_name == "True Extremity":
+                    x_data = -np.abs(2 * (x_data - np.min(x_data)) / (np.max(x_data) - np.min(x_data)) - 1)
                 x_sorted_indices = np.argsort(x_data)
-                if confidence_name == "Entropy" or confidence_name == "Modal Fraction":
+                if confidence_name == "Modal Fraction":
                     x_sorted_indices = x_sorted_indices[::-1]
+                if type(error_climotol) != None:
+                    y_data = y_data  - error_climotol
                 y_sorted_by_x = y_data[x_sorted_indices]
                 percentages = np.arange(100, 4, -1)
                 y_means_x = []
@@ -965,14 +978,14 @@ def confidence_plot(analogue_vector, error_dictionary, settings, error_climotol 
                     plt.ylabel('Percent Accuracy', fontsize=14)
                 else:
                     plt.plot(percentages, np.array(y_means_x), linestyle=line_type, linewidth = 4, color=shades[i], label=label_name, alpha = .8)
-
-                    plt.ylabel('Error', fontsize=14)
-        if error_climotol is not None:
-            # Plot a horizontal line marker (dash) at the point (90, mean of error_climotol)
-           plt.axhline(y=np.mean(error_climotol), color='black', linestyle='--', linewidth=2, label='Average Climatological Error')
-                # Add custom legend entry for the arrow
+                    plt.rcParams['text.usetex'] = True
+                    plt.ylabel(r'$\Delta$' + 'Error Relative to Climotology', fontsize=14)
+        # if error_climotol is not None:
+        #     # Plot a horizontal line marker (dash) at the point (90, mean of error_climotol)
+        #    plt.axhline(y=np.mean(error_climotol), color='black', linestyle='--', linewidth=2, label='Average Climatological Error')
+        #         # Add custom legend entry for the arrow
         plt.legend(fontsize=8)
-        plt.xlabel('Percent Most Confident', fontsize=14)
+        plt.xlabel('Percent Top Cutoff', fontsize=14)
         plt.title('Discard Plot for Prediction Spread (' + str(analogue_vector[analog_idx]) + " analogs)", fontsize=16)
         # Create a custom legend entry for the arrow
         
