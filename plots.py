@@ -317,8 +317,14 @@ def summarize_skill_score(metrics_dict, settings, crps = 0):
     plt.xlim(0, np.max(metrics_dict["analogue_vector"])*1.01)
     max_y_value = np.nanmax(max_values)
     min_y_value = np.nanmin(min_values)
-    y_min_limit = min(0,max(min_y_value - 0.05, -.5))
-    y_max_limit = min(max_y_value + 0.1, 1)
+    # Check if min_y_value and max_y_value are all NaNs
+    if np.isnan(min_y_value) and np.isnan(max_y_value):
+        y_min_limit = -.05
+        y_max_limit = 1
+    else:
+        y_min_limit = min(0, max(min_y_value - 0.05, -0.05))
+        y_max_limit = min(max_y_value + 0.1, 1)
+    
     plt.ylim(y_min_limit, y_max_limit)
     plt.grid(False)
     plt.legend(fontsize=8)
@@ -942,7 +948,7 @@ def uncertainty_whiskers(analogue_vector, network_error, analog_match_error, pre
 
 def get_shades(base_color, num_shades):
     base = np.array(colors.to_rgb(base_color))
-    return [colors.to_hex(base * (1 - i / num_shades)) for i in range(num_shades)]
+    return [colors.to_hex(base * (1 - (i / num_shades))) for i in range(num_shades)]
 
 def confidence_plot(analogue_vector, error_dictionary, settings, error_climotol = None):
     plt.style.use("default")
@@ -961,12 +967,12 @@ def confidence_plot(analogue_vector, error_dictionary, settings, error_climotol 
                 if confidence_name == "Predicted Extremity" or confidence_name == "True Extremity":
                     x_data = -np.abs(2 * (x_data - np.min(x_data)) / (np.max(x_data) - np.min(x_data)) - 1)
                 x_sorted_indices = np.argsort(x_data)
-                if confidence_name == "Modal Fraction":
-                    x_sorted_indices = x_sorted_indices[::-1]
+                # if confidence_name == "Modal Fraction":
+                #     x_sorted_indices = x_sorted_indices[::-1]
                 if type(error_climotol) != None:
                     y_data = y_data  - error_climotol
                 y_sorted_by_x = y_data[x_sorted_indices]
-                percentages = np.arange(100, 4, -1)
+                percentages = np.arange(100, 10, -1)
                 y_means_x = []
                 for p in percentages:
                     cutoff_index = int(len(x_data) * (p / 100))
@@ -987,8 +993,8 @@ def confidence_plot(analogue_vector, error_dictionary, settings, error_climotol 
         plt.legend(fontsize=8)
         plt.xlabel('Percent Top Cutoff', fontsize=14)
         plt.title('Discard Plot for Prediction Spread (' + str(analogue_vector[analog_idx]) + " analogs)", fontsize=16)
-        # Create a custom legend entry for the arrow
-        
+        # Create a custom legend entry for the arro
+        #plt.axvline(x=50, color='black', linestyle='--', linewidth=2)
         ax = plt.gca()
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)

@@ -68,7 +68,7 @@ def visualize_metrics(settings, model, soi_input, soi_output, analog_input, anal
         prog_analogs = []
         prog_soi = []
     # assess model performance and compare to baselines
-    metrics_dict, crps_dict = assess_metrics(settings, model,
+        metrics_dict, crps_dict = assess_metrics(settings, model,
                                   soi_input[i_soi, :, :, :],
                                   soi_output[i_soi],
                                   analog_input[i_analog, :, :, :],
@@ -341,7 +341,7 @@ def create_subplots(random_soi_input, random_soi_output, selected_analogs, selec
     plt.close()
 
 def process_results(run_complex_operations, metrics_function, soi_iterable, pool, n_analogues, 
-                    soi_input_shape, metrics_directory, savename_prefix, file_suffix, chunksize=2):
+                    soi_input_shape, metrics_directory, savename_prefix, file_suffix, chunksize=100):
     """
     Runs the complex operations and processes the results, including appending errors and best analogs,
     saving the best analogs to a file, and returning error metrics.
@@ -403,6 +403,8 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                    show_figure=False, save_figure=True, fig_savename="", my_masks=None, gates = None, analog_dates = None, soi_dates = None):
     ignore_baselines = 1
     if settings["median"]:
+        analog_output_val = analog_output
+        soi_output_val = soi_output
         soi_output = 1.0*(soi_output > np.median(soi_output))
         analog_output = 1.0*(analog_output > np.median(analog_output))
         #soi_output = soi_output - 1.0*(soi_output <-)
@@ -558,7 +560,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                         # prediction_spread = net_err[:,2,:]
                         # modal_fraction = net_err[:,3,:]
                         # entropy_spread = net_err[:,4,:]
-                        error_network, analog_match_error, prediction_spread, prediction_IQR, prediction_min, prediction_max, prediction_range, predicted_val, prediction_crps = process_results(
+                        error_network, analog_match_error, prediction_spread, prediction_entropy, prediction_min, prediction_max, prediction_range, predicted_val, prediction_crps = process_results(
                             run_complex_operations, metrics.super_classification_operation, soi_iterable_instance, pool, 
                             n_analogues, soi_input.shape, dir_settings["metrics_directory"], 
                             settings["savename_prefix"], "masked"
@@ -647,7 +649,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
 
     # -----------------------
     # Simple GLOBAL correlation baseline
-    if not ignore_baselines or 1:
+    if not ignore_baselines:
         with Pool(n_processes) as pool:
             sqrt_area_weights = np.sqrt(np.abs(np.cos(np.deg2rad(lat)))[np.newaxis, :, np.newaxis, np.newaxis])
             best_global_analogs_path = dir_settings["metrics_directory"]+settings["savename_prefix"] + '_best_global_analogs.pickle'
@@ -668,7 +670,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
             if (settings["median"] or settings["percentiles"]!=None):
 
                 error_globalcorr, global_analog_match_error, global_prediction_spread, \
-                global_IQR, global_min, global_max, \
+                global_entropy, global_min, global_max, \
                 global_range, global_predicted_val, global_crps = process_results(
                 run_complex_operations, metrics.super_classification_operation, soi_iterable_instance, pool, 
                 n_analogues, soi_input.shape, dir_settings["metrics_directory"], 
@@ -734,7 +736,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                                                 sqrt_area_weights, best_region_analogs,uncertainties = 1, val_analog_output=analog_output_val, val_soi_output=soi_output_val, progression_analog=progression_analog_reg, progression_soi=progression_soi_reg)
         if (settings["median"] or settings["percentiles"]!=None):
             error_corr, regional_analog_match_error, regional_prediction_spread, \
-            regional_IQR, regional_min, regional_max, \
+            regional_entropy, regional_min, regional_max, \
             regional_range, regional_predicted_val, regional_crps = process_results(
             run_complex_operations, metrics.super_classification_operation, soi_iterable_instance, pool, 
             n_analogues, soi_input.shape, dir_settings["metrics_directory"], 
@@ -797,7 +799,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                                                 cust_reg_map, best_cust_analogs, progression_analog=progression_analog, progression_soi=progression_soi)
             if (settings["median"] or settings["percentiles"]!=None):
                 error_customcorr, NH_analog_match_error, NH_prediction_spread, \
-                NH_IQR, NH_min, NH_max, \
+                NH_entropy, NH_min, NH_max, \
                 NH_range, NH_predicted_val, NH_crps = process_results(
                 run_complex_operations, metrics.super_classification_operation, soi_iterable_instance, pool, 
                 n_analogues, soi_input.shape, dir_settings["metrics_directory"], 
@@ -868,6 +870,12 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
     error_climo_crps = None
     if (settings['median'] or settings["percentiles"]!=None) and settings["error_calc"] != "map":
         error_climo = np.repeat(np.array([1]), len_analogues)
+        if settings["median"]:
+            error_climo = np.ones(len(soi_output)) * .5
+            error_climo_crps = np.ones(len(soi_output))
+        if settings["percentiles"]!=None:
+            error_climo = np.ones(len(soi_output)) * 1-(1/(len(settings["percentiles"])+1))
+            error_climo_crps = np.ones(len(soi_output))
     elif settings["error_calc"] == "map":
         if settings["median"]:
             error_climo = np.ones_like(soi_output) * .5
@@ -947,7 +955,14 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
 
     # -----------------------
         #Confidence Plots
-        if not ignore_baselines:
+        if (settings["median"] or settings["percentiles"]!=None):
+            network_confidence_dict = {"Fractional Mode": prediction_spread,"True Heat": np.tile(-soi_output_val[:,np.newaxis], (1,len_analogues)), "Entropy": prediction_entropy}
+            global_confidence_dict = {}
+            NH_cofidence_dict = {}
+            regional_cofidence_dict = {"Fractional Mode": regional_prediction_spread, "True Heat": np.tile(-soi_output_val[:,np.newaxis], (1,len_analogues)), "Entropy": regional_entropy}
+            random_confidence_dict = {}
+            climatol = error_climo
+        elif not ignore_baselines:
             network_confidence_dict = {"Analog Match": analog_match_error, "Prediction Spread": prediction_spread, "Prediction IQR": prediction_IQR, "Prediction Range": prediction_range}
             global_confidence_dict = {"Analog Match": global_analog_match_error, "Prediction Spread": global_prediction_spread, "Prediction IQR": global_IQR, "Prediction Range": global_range}
             NH_cofidence_dict = {"Analog Match": NH_analog_match_error, "Prediction Spread": NH_prediction_spread}
@@ -955,10 +970,10 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
             random_confidence_dict = {"Prediction Spread": random_output_spread.T}
             climatol = error_climo
         else:
-            network_confidence_dict = {"Predicted Heat": -1*predicted_val, "True Value": np.tile(-soi_output[:,np.newaxis], (1,len_analogues)),}
+            network_confidence_dict = {"Prediction Spread": prediction_spread, "Prediction IQR": prediction_IQR, "Prediction Range": prediction_range,}
             global_confidence_dict = {}
             NH_cofidence_dict = {}
-            regional_cofidence_dict = {"Predicted Heat": -1*regional_predicted_val, "True Value": np.tile(-soi_output[:,np.newaxis], (1,len_analogues)),}
+            regional_cofidence_dict = {"Prediction Spread": regional_prediction_spread, "Prediction IQR": regional_IQR, "Prediction Range": regional_range}
             random_confidence_dict = {}
             climatol = error_climo
 
@@ -968,7 +983,8 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
         NH_cofidence_dict={}
         #regional_cofidence_dict={}
         #global_confidence_dict={}
-        error_conf_dict = {"Network":(error_network, network_confidence_dict, "solid","#2A9D8F"), "Northern Hemisphere":(error_customcorr, NH_cofidence_dict, "dashed", "#E9C46A"), "Global":(error_globalcorr, global_confidence_dict, "dotted", "#F4A261"), "Regional":(error_corr, regional_cofidence_dict, "dashed", "#E76F51"), "Random":(np.array(error_random).T, random_confidence_dict, "dashdot", "black")}
+        net_col = "#2A9D8F"
+        error_conf_dict = {"Network":(error_network, network_confidence_dict, "solid",net_col), "Northern Hemisphere":(error_customcorr, NH_cofidence_dict, "dashed", "#E9C46A"), "Global":(error_globalcorr, global_confidence_dict, "dotted", "#F4A261"), "Regional":(error_corr, regional_cofidence_dict, "dashed", "#E76F51"), "Random":(np.array(error_random).T, random_confidence_dict, "dashdot", "black")}
 
         plots.confidence_plot(analogue_vector, error_conf_dict, settings, climatol)
 
@@ -997,7 +1013,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                                                     analog_output[:,:,:,np.newaxis],
                                                     analog_output,
                                                     no_weights)
-            if (settings["median"] or settings["percentiles"]!=None) and 0:
+            if (settings["median"] or settings["percentiles"]!=None):
                 error_maxskill[:, :] = run_complex_operations(metrics.super_classification_operation,
                                                                 soi_iterable_instance,
                                                                 pool,
@@ -1239,6 +1255,8 @@ def video_syn_data(settings, weights_train_list, lat, lon, sv=""):
     # colorbar limits
     #climits_dat = np.squeeze(weights_train_list[0,:,:,:])
     climits = (np.nanmin(weights_train_list),np.nanmax(weights_train_list))
+    #climits = (np.nanmin(weights_train_list),2.5)
+
     # plot the weighted mask
     def update(frame):
         plt.clf()  # Clear the previous plot
@@ -1270,6 +1288,8 @@ def visualize_interp_model(settings, weights_train, lat, lon, sv="", clims =(0,0
     climits = (climits_dat.min(), climits_dat.max())
     if clims != (0,0): 
         climits = clims
+    #climits = (0.04303372, 2.996723)
+    print(climits)
     #climits = (np.percentile(climits_dat, 96),np.percentile(climits_dat, 99))
     # plot the weighted mask
     if len(weights_train.shape) == 4:

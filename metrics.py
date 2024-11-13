@@ -207,10 +207,17 @@ def super_classification_operation(inputs):
         crps = []
         nan_array = np.ones_like(inputs["soi_output_sample"])*np.nan
         for n_analogs in inputs["n_analogs"]:
-            results.append(inputs["soi_output_sample"]!=(scipy.stats.mode(inputs["analog_output"][i_analogs[:n_analogs]], axis=0)).mode) #fraction that were incorrect
+            output_predictions = inputs["analog_output"][i_analogs[:n_analogs]]
+            mode = scipy.stats.mode(output_predictions, axis=0)
+            if len(np.shape(output_predictions)) > 1:
+                entropy = entropy_calc_3D(output_predictions, axis=0)
+                entropy = np.mean(entropy)
+            else:
+                entropy = entropy_calc_1D(output_predictions, axis=0)
+            results.append(inputs["soi_output_sample"]!=mode.mode) #fraction that were incorrect
             input_diff.append(nan_array)
-            output_spread.append(nan_array)
-            output_IQR.append(nan_array)
+            output_spread.append((inputs["soi_output_sample"]).size/mode.count) #this will be higher as fewer analogs have the mode value. As this number goes up, the disagreement also goes up
+            output_IQR.append(entropy)
             output_min.append(nan_array)
             output_max.append(nan_array)
             actual_prediction.append(nan_array)
