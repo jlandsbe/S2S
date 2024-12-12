@@ -591,7 +591,7 @@ def visualize_interp_model(settings, weights_train, lat, lon, sv="", clims =(0,0
         climits = clims
     #climits = (np.percentile(climits_dat, 96),np.percentile(climits_dat, 99))
     # plot the weighted mask
-    climits = (0.04303372, 2.996723)
+    #climits = (0.04303372, 2.996723)
     print(climits)
     if len(weights_train.shape) == 4:
 

@@ -255,6 +255,9 @@ def summarize_errors(metrics_dict):
 def summarize_skill_score(metrics_dict, settings, crps = 0):
     plt.style.use("default")
     marker_size = 15
+    net_col = "#2A9D8F"
+    global_col = "#F4A261"
+    regional_col = "#E76F51"
     alpha = .8
     max_values = []
     min_values = []
@@ -285,19 +288,20 @@ def summarize_skill_score(metrics_dict, settings, crps = 0):
     x_plot = metrics.eval_function(metrics_dict["error_corr"])
     x_plot = 1. - skill_score_helper(x_plot, x_climatology_baseline, error_type)
     plt.plot(metrics_dict["analogue_vector"], x_plot, '.-', markersize=marker_size, label='region corr.',
-             color="orchid", alpha=alpha)
+             color=regional_col, alpha=alpha)
     max_values.append(np.nanmax(x_plot))
     min_values.append(np.nanmin(x_plot))
     x_plot = metrics_dict["error_persist"]
-    x_plot = 1. - skill_score_helper(x_plot, x_climatology_baseline, error_type)
-    plt.plot(metrics_dict["analogue_vector"], x_plot, '.-', markersize=marker_size, label='persistence',
-             color="saddlebrown", alpha=alpha)
-    max_values.append(np.nanmax(x_plot))
-    min_values.append(np.nanmin(x_plot))
+    if np.mean(x_plot) > 0:
+        x_plot = 1. - skill_score_helper(x_plot, x_climatology_baseline, error_type)
+        plt.plot(metrics_dict["analogue_vector"], x_plot, '--', markersize=0, label='persistence',
+                color="saddlebrown", alpha=alpha)
+        max_values.append(np.nanmax(x_plot))
+        min_values.append(np.nanmin(x_plot))
     x_plot = metrics.eval_function(metrics_dict["error_globalcorr"])
     x_plot = 1. - skill_score_helper(x_plot, x_climatology_baseline, error_type)
     plt.plot(metrics_dict["analogue_vector"], x_plot, '.-', markersize=marker_size, label='global corr.',
-             color="rosybrown", alpha=alpha)
+             color=global_col, alpha=alpha)
     max_values.append(np.nanmax(x_plot))
     min_values.append(np.nanmin(x_plot))
     # x_plot = metrics.eval_function(metrics_dict["error_random"])
@@ -309,13 +313,16 @@ def summarize_skill_score(metrics_dict, settings, crps = 0):
     x_plot = metrics.eval_function(metrics_dict["error_network"])
     x_plot = 1. - skill_score_helper(x_plot, x_climatology_baseline, error_type)
     plt.plot(metrics_dict["analogue_vector"], x_plot, '.-', markersize=marker_size, label='masked analog',
-             color="deepskyblue", alpha=alpha)
+             color=net_col, alpha=alpha)
     max_values.append(np.nanmax(x_plot))
     min_values.append(np.nanmin(x_plot))
     plt.ylabel('Skill Score')
     plt.xlabel('Number of Analogues Averaged')
     plt.xlim(0, np.max(metrics_dict["analogue_vector"])*1.01)
     max_y_value = np.nanmax(max_values)
+    print(min_values)
+    print("persist_error")
+    print(metrics_dict["error_persist"])
     min_y_value = np.nanmin(min_values)
     # Check if min_y_value and max_y_value are all NaNs
     if np.isnan(min_y_value) and np.isnan(max_y_value):
@@ -323,19 +330,24 @@ def summarize_skill_score(metrics_dict, settings, crps = 0):
         y_max_limit = 1
     else:
         y_min_limit = min(0, max(min_y_value - 0.05, -0.05))
+        #y_min_limit = min(0, min(min_y_value - 0.05, -0.05))
         y_max_limit = min(max_y_value + 0.1, 1)
     
     plt.ylim(y_min_limit, y_max_limit)
     plt.grid(False)
     plt.legend(fontsize=8)
+    if '_obs' in settings["presaved_data_filename"]:
+        tagon = '(ERA5)'
+    else:
+        tagon = '(CESM2)'
     if error_type == "field":
         plt.title('Anomaly Correlation Coefficient')
     elif settings["percentiles"] != None:
         plt.title('Classification Accuracy')
     elif crps:
-        plt.title('CRPS Skill Score')
+        plt.title('CRPS Skill Score ' + tagon)
     else:
-        plt.title('MAE Skill Score')
+        plt.title('MAE Skill Score ' + tagon)
 
 def skill_score_helper(x, clima, error_type):
     if error_type == "field":
@@ -542,7 +554,7 @@ def JBL_maps_plot(fig, settings, weights_train, lat, lon, region_bool=True, clim
 
     # Create a diverging colormap
     cmap = LinearSegmentedColormap.from_list("my_diverging_cmap", [hex_color1, "white", hex_color2])
-    cmap.set_bad(color=(233/255, 196/255, 106/255, .5))
+    cmap.set_bad(color=(233/255, 196/255, 106/255))
     #cmap.set_under(color='white')
     if settings["maskout_landocean_input"] == "ocean":
         landfacecolor = "k"
@@ -633,9 +645,9 @@ def JBL_maps_plot(fig, settings, weights_train, lat, lon, region_bool=True, clim
             extent = [lon_min, lon_max, lat_min, lat_max]
             ax.set_extent(extent, crs=ct.crs.PlateCarree())
         if use_text:
-            plt.text(0.01, .02, ' ' + settings["savename_prefix"] + '\n avg skill: ' + str(avg_skill) + ' skill area: ' + str(area_skill) +"%",
-                    fontsize=6, color="gray", va="bottom", ha="left", fontfamily="monospace", backgroundcolor="white",
-                    transform=ax.transAxes,
+            plt.text(0.01, .02, 'Average Skill: ' + str(avg_skill) + ' Skill Area: ' + str(area_skill) +"%",
+                    fontsize=6, color="black", va="bottom", ha="left", fontfamily="monospace", backgroundcolor="white",
+                    transform=ax.transAxes, fontweight = 'bold'
                     )
 
         return ax, climits
@@ -954,6 +966,7 @@ def confidence_plot(analogue_vector, error_dictionary, settings, error_climotol 
     plt.style.use("default")
     for analog_idx in range(1,len(analogue_vector)):
         fig, ax = plt.subplots(figsize=(12, 6))
+        lines = []
         for mask_type_name, mask_type_values in error_dictionary.items():
             error = mask_type_values[0]
             confidence_dictionary = mask_type_values[1]
@@ -972,27 +985,39 @@ def confidence_plot(analogue_vector, error_dictionary, settings, error_climotol 
                 if type(error_climotol) != None:
                     y_data = y_data  - error_climotol
                 y_sorted_by_x = y_data[x_sorted_indices]
-                percentages = np.arange(100, 10, -1)
+                percentages = np.arange(100, 15, -1)
                 y_means_x = []
                 for p in percentages:
                     cutoff_index = int(len(x_data) * (p / 100))
                     y_subset_x = y_sorted_by_x[:cutoff_index]
                     y_means_x.append(np.mean(y_subset_x))
                 label_name = f"{mask_type_name}: {confidence_name}"
-                if type(error_climotol) == type(None):
-                    plt.plot(percentages, 100*(1-np.array(y_means_x)), linestyle=line_type, linewidth = 4, color=shades[i], label=label_name, alpha = .8)
+                if error_climotol is None:
+                    line, = plt.plot(percentages, 100 * (1 - np.array(y_means_x)), linestyle=line_type, linewidth=4, color=shades[i], label=label_name, alpha=.8)
                     plt.ylabel('Percent Accuracy', fontsize=14)
+                elif settings["percentiles"] != None:
+                    line, = plt.plot(percentages, 100*np.array(y_means_x), linestyle=line_type, linewidth=4, color=shades[i], label=label_name, alpha=.8)
+                    plt.ylabel(r'$\Delta$ Error Relative to Climatology (%)', fontsize=14)
                 else:
-                    plt.plot(percentages, np.array(y_means_x), linestyle=line_type, linewidth = 4, color=shades[i], label=label_name, alpha = .8)
+                    line, = plt.plot(percentages, np.array(y_means_x), linestyle=line_type, linewidth=4, color=shades[i], label=label_name, alpha=.8)
                     plt.rcParams['text.usetex'] = True
-                    plt.ylabel(r'$\Delta$' + 'Error Relative to Climotology', fontsize=14)
+                    plt.ylabel(r'$\Delta$ Error Relative to Climatology ($\sigma$)', fontsize=14)
+                lines.append(line)
+        
+        # Shade the area between the first two lines if there are at least two lines
+        if len(lines) >= 2:
+            plt.fill_between(percentages, lines[0].get_ydata(), lines[1].get_ydata(), color='#e9c56a', alpha=0.5)
         # if error_climotol is not None:
         #     # Plot a horizontal line marker (dash) at the point (90, mean of error_climotol)
         #    plt.axhline(y=np.mean(error_climotol), color='black', linestyle='--', linewidth=2, label='Average Climatological Error')
         #         # Add custom legend entry for the arrow
         plt.legend(fontsize=8)
         plt.xlabel('Percent Top Cutoff', fontsize=14)
-        plt.title('Discard Plot for Prediction Spread (' + str(analogue_vector[analog_idx]) + " analogs)", fontsize=16)
+        if '_obs' in settings["presaved_data_filename"]:
+            tagon = '(ERA5)'
+        else:
+            tagon = '(CESM2)'
+        plt.title('Discard Plot for '+ str(analogue_vector[analog_idx]) + " Analogs " + tagon, fontsize=16)
         # Create a custom legend entry for the arro
         #plt.axvline(x=50, color='black', linestyle='--', linewidth=2)
         ax = plt.gca()

@@ -294,17 +294,23 @@ def process_input_output(data_directory, settings, input_standard_dict=None,
     data_output = compute_global_mean(data_output, settings["targ_scalar"], settings["error_calc"])
 
 
-    (data_input, data_output, input_standard_dict, output_standard_dict, tethers, progressions) = process_data(data_feature, data_output, settings, input_standard_dict, output_standard_dict, extra_channel)
-    persist_err = np.mean(compute_persistance(data_output, settings, settings["lead_time"], settings["error_calc"]))
+    (data_input, data_output, input_standard_dict, output_standard_dict, tethers, progressions, persistance_ouput) = process_data(data_feature, data_output, settings, input_standard_dict, output_standard_dict, extra_channel)
+    print("doing persistnace calculations")
+    persist_err = np.mean(compute_persistance(data_output, persistance_ouput, settings, settings["lead_time"], settings["error_calc"]))
 
     gc.collect()
     return data_input, data_output, input_standard_dict, output_standard_dict, persist_err, tethers, progressions
 
-def compute_persistance(output_array, settings, leadtime, error_type = "mse"):
-    tot_lead = leadtime + int((settings["smooth_len_input"]/settings["data_gap"]))
-    array_past = output_array.shift(time = tot_lead).dropna(dim="time")
+
+def compute_persistance(output_array, data_input, settings, leadtime, error_type = "mse"):
+    tot_lead = leadtime + np.abs(int((settings["smooth_len_input"]/settings["data_gap"])))
+    array_past = data_input.shift(time = tot_lead).dropna(dim="time")
     array_fut = output_array[:, tot_lead:]
-    return metrics.get_persist_errors(array_fut.to_numpy(), array_past.to_numpy(), error_type)
+    if settings["percentiles"] != None:
+        persist_all_errs = metrics.get_persist_errors_classification(array_fut.to_numpy(), array_past.to_numpy(), settings["percentiles"])
+        return persist_all_errs
+    else:
+        return metrics.get_persist_errors(array_fut.to_numpy(), array_past.to_numpy(), error_type)
 
 #we change our data from having a member and time dimension, to just a sample dimension, since we aren't concerned with differentiating by member
 def stack_to_samples(data_input, data_output, scalar_mode, no_inputs = 0, no_outputs = 0):
@@ -356,11 +362,13 @@ def process_data(data_feature, data_target, settings, input_standard_dict, outpu
             data_input = smooth_data(data_input, settings["smooth_len_input"])
         if settings["smooth_len_output"] != 0:
             data_output = smooth_data(data_target, settings["smooth_len_output"])
+            persistance_output = smooth_data(data_target, -1*settings["smooth_len_input"])
         else:
             data_output = data_target
     #otherwise, smooth via downscaling (preserve more independence between samples) - this must be a multiple of the lead time (e.g. you cannot have weekly samples with a 8 day lead time
         # but you could with a 7, 14, or 21 day lead. )
     else:
+        raise ValueError("persistnace calculation not implemented")
         #this is more of a check to make sure we have the same dates for input/output, should be ok to remove
         data_input, data_target = xr.align(data_input, data_target, join="inner", exclude = ("lat","lon"))
         t_avg = str(settings["averaged_days"]) + "M"
@@ -375,8 +383,10 @@ def process_data(data_feature, data_target, settings, input_standard_dict, outpu
     #align our data, so all dates are lined up again before applying the lead time filter. This results in index i having data_input from lead time earlier than the data_output
     #this is used to filter out any years that don't have correspinding years in the input/output
     data_input_orig, data_output_orig = xr.align(data_input, data_output, join="inner", exclude = ("lat","lon")) 
+    ___, persistance_output  = xr.align(data_output, persistance_output, join="inner",) 
     data_input_orig = gap_data(data_input_orig, settings["data_gap"]) 
     data_output_orig = gap_data(data_output_orig, settings["data_gap"])
+    ___, persistance_output  = xr.align(data_output, persistance_output, join="inner",) 
     #get any tethers you want:
     tethers = []
     for idx, lead_amount in enumerate(settings["tethers"]):
@@ -385,6 +395,7 @@ def process_data(data_feature, data_target, settings, input_standard_dict, outpu
 
      #after this point, don't realign based on time or you'll get rid of lead time
     data_input, data_output = filter_lead_times(data_input_orig, data_output_orig, settings["lead_time"])
+    ___, persistance_output  = xr.align(data_output, persistance_output, join="inner",) 
     for idx,t in enumerate(tethers):
         t = t[0:len(data_input.time)]
         tethers[idx] = t
@@ -395,19 +406,20 @@ def process_data(data_feature, data_target, settings, input_standard_dict, outpu
         data_input, data_output, tethers = filter_years(data_input, data_output, settings["years"], tethers)
     if settings["months"] != None:
         data_input, data_output,tethers = filter_months(data_input, data_output, settings["months"], tethers)
+    ___, persistance_output  = xr.align(data_output, persistance_output, join="inner",) 
     #progressions, data_input, data_output = filter_progression_leads(data_input_orig, data_input, data_output, settings["progressions"])
     #Here we optionally standardize the data over all samples (i.e. standardize each grid point)
     progressions = []
     data_input, input_standard_dict = standardize_data(data_input, input_standard_dict, settings["standardize_bool"])
     data_output, output_standard_dict = standardize_data(data_output, output_standard_dict,settings["standardize_bool"], settings["median"])
-
+    persistance_output, ___ = standardize_data(persistance_output, output_standard_dict, settings["standardize_bool"], settings["median"])
     for idx, t in enumerate(tethers):
         tethers[idx] = standardize_data(t, None, settings["standardize_bool"], settings["median"])[0]
 
     for idx, p in enumerate(progressions):
         progressions[idx] = standardize_data(p, None, settings["standardize_bool"], settings["median"])[0]
-
-    return data_input, data_output, input_standard_dict, output_standard_dict, tethers, progressions
+    ___, persistance_output  = xr.align(data_output, persistance_output, join="inner",) 
+    return data_input, data_output, input_standard_dict, output_standard_dict, tethers, progressions, persistance_output
 
 #cut out any years you don't want
 def filter_years(data_input, data_output, years, tethers =[]):
@@ -492,13 +504,19 @@ def gap_data(data, step):
 
 
 
-def extract_region(data, region=None, lat=None, lon=None, mask_builder = 0, progressions = 0):
+def extract_region(data, region=None, lat=None, lon=None, mask_builder = 0, progressions = 0, ablation = 0):
     if region is None:
         min_lon, max_lon = [0, 360]
         min_lat, max_lat = [-90, 90]
     else:
         min_lon, max_lon = region["lon_range"]
         min_lat, max_lat = region["lat_range"]
+    if ablation:
+        ilon = np.where((lon >= min_lon) & (lon <= max_lon))[0]
+        ilat = np.where((lat >= min_lat) & (lat <= max_lat))[0]
+        data_ablation = data.copy()
+        data_ablation[np.ix_(ilat, ilon, np.arange(data.shape[2]))] = 0
+        return data_ablation, data
     if mask_builder:
         ilon = np.where((lon >= min_lon) & (lon <= max_lon))[0]
         ilat = np.where((lat >= min_lat) & (lat <= max_lat))[0]
@@ -562,7 +580,7 @@ def get_netcdf(var, data_directory, settings, members = [], obs_fn = None, time_
 #probably have to change the directories here but then it's just multiplication
 def mask_in_land_ocean(da, settings, maskin="land"):
     # if no land mask or ocean masks exists, run make_land_ocean_mask()
-    if not os.path.isfile(dir_settings["net_data"] + "/month_ocean_mask.nc") or not os.path.isfile(dir_settings["net_data"]  + "/month_land_mask.nc") or not os.path.isfile(dir_settings["net_data"]  + "/month_no_mask.nc"):
+    if not os.path.isfile(dir_settings["net_data"] + "/month_ocean_mask.pickle") or not os.path.isfile(dir_settings["net_data"]  + "/month_land_mask.pickle") or not os.path.isfile(dir_settings["net_data"]  + "/month_no_mask.pickle"):
         make_land_mask(settings)
     if maskin == "land":
         with gzip.open(dir_settings["net_data"] + "/month_land_mask.pickle", "rb") as fp:
@@ -576,42 +594,49 @@ def mask_in_land_ocean(da, settings, maskin="land"):
     else:
         raise NotImplementedError("no such mask type.")
     if da is not None:
-        return da*mask
+        if maskin == "all":
+            return da
+        else:
+            if len(np.shape(da)) > len(np.shape(mask)):
+                for i in range(2,len(np.shape(da))):
+                    mask = np.expand_dims(mask, axis=0)
+            return da*mask
     else:
         return mask
 
 
 def make_land_mask(settings):
-    x_data = xr.load_dataset("/barnes-scratch/DATA/CESM2-LE/raw_data/monthly/tos/b.e21.BHISTcmip6.f09_g17.LE2-1001.001.cam.h0.SST.185001-185912.nc")["SST"]
+    x_data = xr.load_dataset("/Users/jlandsbe/Downloads/WeightedMaskAnalogForecasting-main/b.e11.B1850C5CN.f09_g16.005.cam.h0.LANDFRAC.040001-049912.nc")["LANDFRAC"]
+    
     x_data = x_data.mean(dim="time", skipna=True)
     
     #x_ocean keeps ocean values, sets land to 0
-    x_ocean = xr.where(x_data.isnull(), 0.0, 1.0)#replace where there aren't values with 0 (since it's a map of SSS, this implies those areas are land)
-    x_ocean.to_netcdf(dir_settings["net_data"] + "month_ocean_mask.nc")
+    x_ocean = xr.where(x_data > .5, 0.0, 1.0)#replace where there aren't values with 0 (since it's a map of SSS, this implies those areas are land)
+    x_ocean.to_netcdf(dir_settings["net_data"] + "/month_ocean_mask.nc")
     x_ocean.plot()
 
-    #x_land keeps land values, sets ocean to 1
-    x_land = xr.where(x_data.isnull(), 1.0, 0.0)#replace where there aren't values with 1 (since it's a map of SSS, this implies it is land)
-    x_land.to_netcdf(dir_settings["net_data"] + "month_land_mask.nc")
+    #x_land keeps land values, sets ocean to 0
+    x_land = xr.where(x_data < .5, 1.0, 0.0)#replace where there aren't values with 1 (since it's a map of SSS, this implies it is land)
+    x_land.to_netcdf(dir_settings["net_data"] + "/month_land_mask.nc")
     x_land.plot()
 
     #x_all keeps land and ocean values
     x_all = x_land + x_ocean
-    x_all.to_netcdf(dir_settings["net_data"] + "month_no_mask.nc")
+    x_all.to_netcdf(dir_settings["net_data"] + "/month_no_mask.nc")
     x_all.plot()
 
-    da = xr.load_dataarray(dir_settings["net_data"] + "month_land_mask.nc")
-    data_savename = dir_settings["net_data"] + "month_land_mask.pickle"
+    da = xr.load_dataarray(dir_settings["net_data"] + "/month_land_mask.nc")
+    data_savename = dir_settings["net_data"] + "/month_land_mask.pickle"
     with gzip.open(data_savename, "wb") as fp:
         pickle.dump(da.to_numpy().astype(np.float32), fp)
 
-    da = xr.load_dataarray(dir_settings["net_data"] + "month_no_mask.nc")
-    data_savename = dir_settings["net_data"] + "month_no_mask.pickle"
+    da = xr.load_dataarray(dir_settings["net_data"] + "/month_no_mask.nc")
+    data_savename = dir_settings["net_data"] + "/month_no_mask.pickle"
     with gzip.open(data_savename, "wb") as fp:
         pickle.dump(da.to_numpy().astype(np.float32), fp)
 
-    da = xr.load_dataarray(dir_settings["net_data"] + "month_ocean_mask.nc")
-    data_savename = dir_settings["net_data"] + "month_ocean_mask.pickle"
+    da = xr.load_dataarray(dir_settings["net_data"] + "/month_ocean_mask.nc")
+    data_savename = dir_settings["net_data"] + "/month_ocean_mask.pickle"
     with gzip.open(data_savename, "wb") as fp:
         pickle.dump(da.to_numpy().astype(np.float32), fp)
 

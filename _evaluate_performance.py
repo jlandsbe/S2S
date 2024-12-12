@@ -142,9 +142,9 @@ if __name__ == "__main__":
                 plot_ann_metrics["error_climo"])
             plt.axhline(y=y_plot, linestyle='--', color="teal", alpha=.8, label="vanilla ann")
 
-            y_plot = 1. - metrics.eval_function(plot_ann_metrics["error_persist"]) / metrics.eval_function(
-                plot_ann_metrics["error_climo"])
-            plt.axhline(y=y_plot, linestyle='--', color="teal", alpha=.2, label="persistence")
+            # y_plot = 1. - metrics.eval_function(plot_ann_metrics["error_persist"]) / metrics.eval_function(
+            #     plot_ann_metrics["error_climo"])
+            # plt.axhline(y=y_plot, linestyle='--', color="teal", alpha=.2, label="persistence")
 
             y_plot = 1. - metrics.eval_function(plot_ann_metrics["error_custom"]) / metrics.eval_function(
                 plot_ann_metrics["error_climo"])

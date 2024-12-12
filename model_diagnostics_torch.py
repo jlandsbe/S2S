@@ -341,7 +341,7 @@ def create_subplots(random_soi_input, random_soi_output, selected_analogs, selec
     plt.close()
 
 def process_results(run_complex_operations, metrics_function, soi_iterable, pool, n_analogues, 
-                    soi_input_shape, metrics_directory, savename_prefix, file_suffix, chunksize=100):
+                    soi_input_shape, metrics_directory, savename_prefix, file_suffix, chunksize=4):
     """
     Runs the complex operations and processes the results, including appending errors and best analogs,
     saving the best analogs to a file, and returning error metrics.
@@ -649,7 +649,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
 
     # -----------------------
     # Simple GLOBAL correlation baseline
-    if not ignore_baselines:
+    if not ignore_baselines or 1:
         with Pool(n_processes) as pool:
             sqrt_area_weights = np.sqrt(np.abs(np.cos(np.deg2rad(lat)))[np.newaxis, :, np.newaxis, np.newaxis])
             best_global_analogs_path = dir_settings["metrics_directory"]+settings["savename_prefix"] + '_best_global_analogs.pickle'
@@ -956,10 +956,10 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
     # -----------------------
         #Confidence Plots
         if (settings["median"] or settings["percentiles"]!=None):
-            network_confidence_dict = {"Fractional Mode": prediction_spread,"True Heat": np.tile(-soi_output_val[:,np.newaxis], (1,len_analogues)), "Entropy": prediction_entropy}
+            network_confidence_dict = {"Ensemble Agreement": prediction_spread,}
             global_confidence_dict = {}
             NH_cofidence_dict = {}
-            regional_cofidence_dict = {"Fractional Mode": regional_prediction_spread, "True Heat": np.tile(-soi_output_val[:,np.newaxis], (1,len_analogues)), "Entropy": regional_entropy}
+            regional_cofidence_dict = {"Ensemble Agreement": regional_prediction_spread,}
             random_confidence_dict = {}
             climatol = error_climo
         elif not ignore_baselines:
@@ -970,10 +970,10 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
             random_confidence_dict = {"Prediction Spread": random_output_spread.T}
             climatol = error_climo
         else:
-            network_confidence_dict = {"Prediction Spread": prediction_spread, "Prediction IQR": prediction_IQR, "Prediction Range": prediction_range,}
+            network_confidence_dict = {'Predicted Extremity': predicted_val,}
             global_confidence_dict = {}
             NH_cofidence_dict = {}
-            regional_cofidence_dict = {"Prediction Spread": regional_prediction_spread, "Prediction IQR": regional_IQR, "Prediction Range": regional_range}
+            regional_cofidence_dict = { 'Predicted Extremity': regional_predicted_val,}
             random_confidence_dict = {}
             climatol = error_climo
 
@@ -984,7 +984,9 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
         #regional_cofidence_dict={}
         #global_confidence_dict={}
         net_col = "#2A9D8F"
-        error_conf_dict = {"Network":(error_network, network_confidence_dict, "solid",net_col), "Northern Hemisphere":(error_customcorr, NH_cofidence_dict, "dashed", "#E9C46A"), "Global":(error_globalcorr, global_confidence_dict, "dotted", "#F4A261"), "Regional":(error_corr, regional_cofidence_dict, "dashed", "#E76F51"), "Random":(np.array(error_random).T, random_confidence_dict, "dashdot", "black")}
+        global_col = "#F4A261"
+        regional_col = "#E76F51"
+        error_conf_dict = {"Network":(error_network, network_confidence_dict, "solid",net_col), "Northern Hemisphere":(error_customcorr, NH_cofidence_dict, "dashed", "#E9C46A"), "Global":(error_globalcorr, global_confidence_dict, "dotted", global_col), "Regional":(error_corr, regional_cofidence_dict, "dashed", regional_col), "Random":(np.array(error_random).T, random_confidence_dict, "dashdot", "black")}
 
         plots.confidence_plot(analogue_vector, error_conf_dict, settings, climatol)
 
@@ -1149,7 +1151,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
             "analogue_vector": analogue_vector,
             "error_random": np.ones_like(error_globalcorr.T)*np.nan,
             "error_climo": np.tile(np.mean(error_climo,axis=(-2,-1))[:, np.newaxis], (1, np.shape(error_globalcorr)[1])).T,
-            "error_persist": error_persist*np.nan,
+            "error_persist": error_persist,
             "error_globalcorr": np.mean(error_globalcorr,axis=(-2,-1)).T,
             "error_corr": np.mean(error_corr,axis=(-2,-1)).T,
             "error_customcorr": error_customcorr.T,
@@ -1246,36 +1248,37 @@ def scale_mask(weighted_mask, landmask, setmaskedas=0.0):
 
     return weighted_mask
 
-def video_syn_data(settings, weights_train_list, lat, lon, sv=""):
-    #expects shape of lat x lon x channels
-    num_maps = [weights_train_list][0].shape[-1]
-    ax = dict()
-    fig = plt.figure(figsize=(7.5 * num_maps, 5))
+# def video_syn_data(settings, weights_train_list, lat, lon, sv=""):
+#     #expects shape of lat x lon x channels
+#     num_maps = [weights_train_list][0].shape[-1]
+#     ax = dict()
+#     fig = plt.figure(figsize=(7.5 * num_maps, 5))
 
-    # colorbar limits
-    #climits_dat = np.squeeze(weights_train_list[0,:,:,:])
-    climits = (np.nanmin(weights_train_list),np.nanmax(weights_train_list))
-    #climits = (np.nanmin(weights_train_list),2.5)
+#     # colorbar limits
+#     #climits_dat = np.squeeze(weights_train_list[0,:,:,:])
+#     climits = (np.nanmin(weights_train_list),np.nanmax(weights_train_list))
+#     #climits = (np.nanmin(weights_train_list),2.5)
 
-    # plot the weighted mask
-    def update(frame):
-        plt.clf()  # Clear the previous plot
-        weights_train = weights_train_list[frame]
-        artists = []
-        if len(weights_train.shape) == 4:
-            for imap in range(num_maps):
-                ax, artist = plots.plot_state_masks(fig, settings, weights_train_ind[:, :, imap], lat=lat, lon=lon, central_longitude=215., climits = climits, title_text="Mask for Channel " + str(imap),subplot=(1, num_maps, imap + 1), )
-                artists.append(artist)
-        else:
-            for imap in range(num_maps):
-                ax, artist = plots.plot_interp_masks(fig, settings, weights_train[:, :, imap], lat=lat, lon=lon, central_longitude=215., climits = climits, title_text="Mask for Channel " + str(imap),subplot=(1, num_maps, imap + 1), )
-                artists.append(artist)
-        return artists
-    # save the mask
-    ani = animation.FuncAnimation(fig, update, frames=len(weights_train_list), interval=50, blit=False)
-    output_file = dir_settings["figure_directory"] + settings["savename_prefix"] + sv + "_synthetic_data.gif"
-    ani.save(output_file, writer='imagemagick')
-    plt.tight_layout()
+#     # plot the weighted mask
+#     def update(frame):
+#         plt.clf()  # Clear the previous plot
+#         weights_train = weights_train_list[frame]
+#         artists = []
+#         if len(weights_train.shape) == 4:
+#             for imap in range(num_maps):
+#                 lab = "Mask for Channel " + str(imap)
+#                 ax, artist = plots.plot_state_masks(fig, settings, weights_train_ind[:, :, imap], lat=lat, lon=lon, central_longitude=215., climits = climits, title_text="Mask for Channel " + str(imap),subplot=(1, num_maps, imap + 1), )
+#                 artists.append(artist)
+#         else:
+#             for imap in range(num_maps):
+#                 ax, artist = plots.plot_interp_masks(fig, settings, weights_train[:, :, imap], lat=lat, lon=lon, central_longitude=215., climits = climits, title_text="Mask for Channel " + str(imap),subplot=(1, num_maps, imap + 1), )
+#                 artists.append(artist)
+#         return artists
+#     # save the mask
+#     ani = animation.FuncAnimation(fig, update, frames=len(weights_train_list), interval=50, blit=False)
+#     output_file = dir_settings["figure_directory"] + settings["savename_prefix"] + sv + "_synthetic_data.gif"
+#     ani.save(output_file, writer='imagemagick')
+#     plt.tight_layout()
 
 def visualize_interp_model(settings, weights_train, lat, lon, sv="", clims =(0,0), ttl=""):
     #expects shape of lat x lon x channels
@@ -1296,15 +1299,47 @@ def visualize_interp_model(settings, weights_train, lat, lon, sv="", clims =(0,0
 
         weights_train = weights_train.mean(axis=0)
         for imap in range(num_maps):
+            if imap == 0:
+                predictor = settings["feature_var"]
+                if predictor == "U":
+                    lab = "U250"
+                if predictor == "TREFHT":
+                    lab = "Temperature"
+                if predictor == "PRECT":
+                    lab = "Precipitation"
+            else:
+                predictor = settings["extra_channel"][imap-1]
+                if predictor == "U":
+                    lab = "U250"
+                if predictor == "TREFHT":
+                    lab = "Temperature"
+                if predictor == "PRECT":
+                    lab = "Precipitation"
             if type(ttl) == type(""):
-                ttl_text = "Mask for Channel " + str(imap)
+                ttl_text = "Weighted Mask of " + lab
             else:
                 ttl_text = str(imap) + " Branch Weight: " + str(ttl[imap])
             ax, _ = plots.plot_state_masks(fig, settings, weights_train_ind[:, :, imap], lat=lat, lon=lon, central_longitude=215., climits = climits, title_text=ttl_text,subplot=(1, num_maps, imap + 1), )
     else:
         for imap in range(num_maps):
+            if imap == 0:
+                predictor = settings["feature_var"]
+                if predictor == "U":
+                    lab = "U250"
+                if predictor == "TREFHT":
+                    lab = "Temperature"
+                if predictor == "PRECT":
+                    lab = "Precipitation"
+            else:
+                predictor = settings["extra_channel"][imap-1]
+                if predictor == "U":
+                    lab = "U250"
+                if predictor == "TREFHT":
+                    lab = "Temperature"
+                if predictor == "PRECT":
+                    lab = "Precipitation"
             if type(ttl) == type(""):
-                ttl_text = "Mask for Channel " + str(imap)
+                ttl_text = ttl_text = "Weighted Mask of " + lab
             else:
                 ttl_text = str(imap) + " Branch Weight: " + str(ttl[imap])
             ax, _ = plots.plot_interp_masks(fig, settings, weights_train[:, :, imap], lat=lat, lon=lon, central_longitude=215., climits = climits, title_text=ttl_text,subplot=(1, num_maps, imap + 1), use_text=0)

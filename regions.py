@@ -53,7 +53,10 @@ def get_region_dict(region=None):
             "lat_range": [48., 60.],
             "lon_range": [360-165, 360-124],
         },
-
+        "north_pacific": {
+            "lat_range": [0., 60.],
+            "lon_range": [360-225, 360-124],
+        },
         "nino34" :{
             "lat_range":[-5., 5.],
             "lon_range":[360-170, 360-120],
@@ -123,7 +126,7 @@ def get_region_dict(region=None):
                 "lat_range":[25., 48.],
                 "lon_range":[360.-124., 360.-70.],
              },
-            "n_atlantic_ext" :{
+        "n_atlantic_ext" :{
                 "lat_range":[25., 65.],
                 "lon_range":[360.-82., 360],
         },

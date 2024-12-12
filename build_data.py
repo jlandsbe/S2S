@@ -259,18 +259,23 @@ def process_input_output(data_directory, settings, input_standard_dict=None,
     data_output = compute_global_mean(data_output, settings["targ_scalar"], settings["error_calc"])
 
 
-    (data_input, data_output, input_standard_dict, output_standard_dict, tethers, progressions) = process_data(data_feature, data_output, settings, input_standard_dict, output_standard_dict, extra_channel)
-    persist_err = np.mean(compute_persistance(data_output, settings, settings["lead_time"], settings["error_calc"]))
+    (data_input, data_output, input_standard_dict, output_standard_dict, tethers, progressions, persistance_output) = process_data(data_feature, data_output, settings, input_standard_dict, output_standard_dict, extra_channel)
+    persist_err = compute_persistance(data_output, persistance_output, settings, settings["lead_time"], settings["error_calc"])
+    persist_err = np.mean(persist_err)
 
     gc.collect()
     return data_input, data_output, input_standard_dict, output_standard_dict, persist_err, tethers, progressions
 
 
-def compute_persistance(output_array, settings, leadtime, error_type = "mse"):
-    tot_lead = leadtime + int((settings["smooth_len_input"]/settings["data_gap"]))
-    array_past = output_array.shift(time = tot_lead).dropna(dim="time")
+def compute_persistance(output_array, data_input, settings, leadtime, error_type = "mse"):
+    tot_lead = leadtime + np.abs(int((settings["smooth_len_input"]/settings["data_gap"])))
+    array_past = data_input.shift(time = tot_lead).dropna(dim="time")
     array_fut = output_array[:, tot_lead:]
-    return metrics.get_persist_errors(array_fut.to_numpy(), array_past.to_numpy(), error_type)
+    if settings["percentiles"] != None:
+        persist_all_errs = metrics.get_persist_errors_classification(array_fut.to_numpy(), array_past.to_numpy(), settings["percentiles"])
+        return persist_all_errs
+    else:
+        return metrics.get_persist_errors(array_fut.to_numpy(), array_past.to_numpy(), error_type)
 
 
 #we change our data from having a member and time dimension, to just a sample dimension, since we aren't concerned with differentiating by member
@@ -321,6 +326,7 @@ def process_data(data_feature, data_target, settings, input_standard_dict, outpu
     if settings["averaged_days"] == 0:
         data_input = smooth_data(data_input, settings["smooth_len_input"])
         data_output = smooth_data(data_target, settings["smooth_len_output"])
+        persistance_output = smooth_data(data_target, -1*settings["smooth_len_input"])
     #otherwise, smooth via downscaling (preserve more independence between samples) - this must be a multiple of the lead time (e.g. you cannot have weekly samples with a 8 day lead time
         # but you could with a 7, 14, or 21 day lead. )
     else:
@@ -346,6 +352,7 @@ def process_data(data_feature, data_target, settings, input_standard_dict, outpu
 
      #after this point, don't realign based on time or you'll get rid of lead time
     data_input, data_output = filter_lead_times(data_input_orig, data_output_orig, settings["lead_time"])
+    ___, persistance_output  = xr.align(data_output, persistance_output, join="inner",) 
     for idx,t in enumerate(tethers):
         t = t[0:len(data_input.time)]
         tethers[idx] = t
@@ -357,17 +364,18 @@ def process_data(data_feature, data_target, settings, input_standard_dict, outpu
     if settings["months"] != None:
         data_input, data_output,tethers = filter_months(data_input, data_output, settings["months"], tethers)
     progressions, data_input, data_output = filter_progression_leads(data_input_orig, data_input, data_output, settings["progressions"])
+    ___, persistance_output  = xr.align(data_output, persistance_output, join="inner",)
     #Here we optionally standardize the data over all samples (i.e. standardize each grid point)
     data_input, input_standard_dict = standardize_data(data_input, input_standard_dict, settings["standardize_bool"])
     data_output, output_standard_dict = standardize_data(data_output, output_standard_dict,settings["standardize_bool"], settings["median"])
-
+    persistance_output, ___ = standardize_data(persistance_output, output_standard_dict, settings["standardize_bool"], settings["median"])
     for idx, t in enumerate(tethers):
         tethers[idx] = standardize_data(t, None, settings["standardize_bool"], settings["median"])[0]
 
     for idx, p in enumerate(progressions):
         progressions[idx] = standardize_data(p, None, settings["standardize_bool"], settings["median"])[0]
-
-    return data_input, data_output, input_standard_dict, output_standard_dict, tethers, progressions
+    ___, persistance_output  = xr.align(data_output, persistance_output, join="inner",)
+    return data_input, data_output, input_standard_dict, output_standard_dict, tethers, progressions, persistance_output
 
 #cut out any years you don't want
 def filter_years(data_input, data_output, years, tethers =[]):
@@ -457,13 +465,19 @@ def smooth_data(data, smooth_time):
 
 
 
-def extract_region(data, region=None, lat=None, lon=None, mask_builder = 0, progressions = 0):
+def extract_region(data, region=None, lat=None, lon=None, mask_builder = 0, progressions = 0, ablation = 0):
     if region is None:
         min_lon, max_lon = [0, 360]
         min_lat, max_lat = [-90, 90]
     else:
         min_lon, max_lon = region["lon_range"]
         min_lat, max_lat = region["lat_range"]
+    if ablation:
+        ilon = np.where((lon >= min_lon) & (lon <= max_lon))[0]
+        ilat = np.where((lat >= min_lat) & (lat <= max_lat))[0]
+        data_ablation = data.copy()
+        data_ablation[ilat,ilon,:] = 0
+        return data_ablation, data
     if mask_builder:
         ilon = np.where((lon >= min_lon) & (lon <= max_lon))[0]
         ilat = np.where((lat >= min_lat) & (lat <= max_lat))[0]
@@ -536,7 +550,13 @@ def mask_in_land_ocean(da, settings, maskin="land"):
     else:
         raise NotImplementedError("no such mask type.")
     if da is not None:
-        return da*mask
+        if maskin == "all":
+            return da
+        else:
+            if len(np.shape(da)) > len(np.shape(mask)):
+                for i in range(2,len(np.shape(da))):
+                    mask = np.expand_dims(mask, axis=0)
+            return da*mask
     else:
         return mask
 

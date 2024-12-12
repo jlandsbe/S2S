@@ -76,7 +76,7 @@ class CustomDataset(torch.utils.data.Dataset):
             soi_out = self.soi_output[soi_idx]
             soi_out_normalized = 2 * (soi_out - self.soi_output_min) / (self.soi_output_max - self.soi_output_min)
             err = torch.mean((self.soi_output[soi_idx] - self.analog_output[analog_idx])**2)
-        return self.soi_input[soi_idx], self.analog_input[analog_idx], err, soi_out_normalized
+        return self.soi_input[soi_idx], self.analog_input[analog_idx], err, soi_out
     
 class TorchModel_base(nn.Module):
     def __init__(self, settings, input_dim1):
@@ -130,9 +130,11 @@ class TorchModel_base(nn.Module):
             x = self.map(x) + self.bias_only
             new_size = (x.size()[0],) + self.input_dim1
             map = x.reshape(new_size)
+            map = F.relu(map)
             map = map / map.mean(dim=(1, 2, 3), keepdim=True) #comment out this line
         else:
-            map = self.bias_only.reshape(self.input_dim1)
+            map = self.bias_only.reshape(self.input_dim1) 
+            map = F.relu(map)
             map = map / map.mean()
         soi_weighted = map * x1
         analog_weighted = map * x2

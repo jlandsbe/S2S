@@ -14,11 +14,37 @@ __author__ = "Jamin K. Rader, Elizabeth A. Barnes, and Randal J. Barnes"
 __version__ = "30 March 2023"
 
 # List of experiments to run
-#EXP_NAME_LIST = ("california_temp_z500_to_temp_week_summer_90th_weighted_obs",)
-#EXP_NAME_LIST = ( "california_temp_to_temp_week_summer_90th_weighted_obs",)
-#EXP_NAME_LIST = ( "natl_ext_temp_wind_to_wind_winter_m14_tercile","natl_ext_temp_wind_to_wind_winter_m12_tercile","natl_ext_temp_wind_to_wind_winter_m1_tercile")
-#EXP_NAME_LIST = ( "midwest_month1_temp_temp_out_summer_obs",)
-EXP_NAME_LIST = ("california_temp_to_temp_week_summer_90th_weighted_high_low",)
+#EXP_NAME_LIST = ("natl_ext_temp_wind_to_wind_winter_m12_obs_tercile_ablation_land","natl_ext_temp_wind_to_wind_winter_m12_obs_tercile_ablation_SH","natl_ext_temp_wind_to_wind_winter_m12_obs_tercile_ablation_npac","natl_ext_temp_wind_to_wind_winter_m12_obs_tercile_switch_mask", "natl_ext_temp_wind_to_wind_winter_m1_obs_tercile_switch_mask","natl_ext_temp_wind_to_wind_winter_m1_tercile_switch_mask","natl_ext_temp_wind_to_wind_winter_m12_tercile_switch_mask")
+#EXP_NAME_LIST = ("natl_ext_temp_wind_to_wind_winter_m12_obs_tercile_ablation_80_cutoff","natl_ext_temp_wind_to_wind_winter_m12_tercile_ablation_80_cutoff","natl_ext_temp_wind_to_wind_winter_m12_obs_tercile_ablation_40_cutoff","natl_ext_temp_wind_to_wind_winter_m12_tercile_ablation_40_cutoff","natl_ext_temp_wind_to_wind_winter_m12_obs_tercile_ablation_20_cutoff","natl_ext_temp_wind_to_wind_winter_m12_tercile_ablation_20_cutoff",)
+#EXP_NAME_LIST = ( "natl_ext_temp_wind_to_wind_winter_m12_obs_tercile_ablation_natl","natl_ext_temp_wind_to_wind_winter_m12_obs_tercile_switch_mask",)
+# EXP_NAME_LIST = ("natl_ext_temp_wind_to_wind_winter_m12_tercile_extra",
+#     "natl_ext_temp_wind_to_wind_winter_m12_tercile_ablation_temp_extra",
+#     "natl_ext_temp_wind_to_wind_winter_m12_tercile_ablation_u250_extra",
+#     "natl_ext_temp_wind_to_wind_winter_m12_tercile_ablation_SH_extra",
+#     "natl_ext_temp_wind_to_wind_winter_m12_tercile_ablation_natl_extra",
+#     "natl_ext_temp_wind_to_wind_winter_m12_tercile_ablation_npac_extra",
+#     "natl_ext_temp_wind_to_wind_winter_m12_tercile_switch_mask_extra",
+#     "natl_ext_temp_wind_to_wind_winter_m12_tercile_ablation_20_cutoff_extra",
+#     "natl_ext_temp_wind_to_wind_winter_m12_tercile_ablation_40_cutoff_extra",
+#     "natl_ext_temp_wind_to_wind_winter_m12_tercile_ablation_80_cutoff_extra",
+#     "natl_ext_temp_wind_to_wind_winter_m12_tercile_ablation_90_cutoff_extra",
+#     "natl_ext_temp_wind_to_wind_winter_m12_obs_tercile_extra",
+#     "natl_ext_temp_wind_to_wind_winter_m12_obs_tercile_ablation_temp_extra",
+#     "natl_ext_temp_wind_to_wind_winter_m12_obs_tercile_ablation_u250_extra",
+#     "natl_ext_temp_wind_to_wind_winter_m12_obs_tercile_ablation_SH_extra",
+#     "natl_ext_temp_wind_to_wind_winter_m12_obs_tercile_ablation_natl_extra",
+#     "natl_ext_temp_wind_to_wind_winter_m12_obs_tercile_ablation_npac_extra",
+#     "natl_ext_temp_wind_to_wind_winter_m12_obs_tercile_switch_mask_extra",
+#     "natl_ext_temp_wind_to_wind_winter_m12_obs_tercile_ablation_20_cutoff_extra",
+#     "natl_ext_temp_wind_to_wind_winter_m12_obs_tercile_ablation_40_cutoff_extra",
+#     "natl_ext_temp_wind_to_wind_winter_m12_obs_tercile_ablation_80_cutoff_extra",
+#     "natl_ext_temp_wind_to_wind_winter_m12_obs_tercile_ablation_90_cutoff_extra")
+
+# EXP_NAME_LIST = ("natl_ext_temp_wind_to_wind_winter_m12_obs_tercile_ablation_random_npac_extra","natl_ext_temp_wind_to_wind_winter_m12_tercile_ablation_random_npac_extra","natl_ext_temp_wind_to_wind_winter_m12_obs_tercile_ablation_random_natl_extra","natl_ext_temp_wind_to_wind_winter_m12_tercile_ablation_random_natl_extra","natl_ext_temp_wind_to_wind_winter_m12_obs_tercile_ablation_random_SH_extra","natl_ext_temp_wind_to_wind_winter_m12_tercile_ablation_random_SH_extra")
+#EXP_NAME_LIST = ("california_temp_to_temp_week_summer_90th_high_low","california_temp_to_temp_week_summer_90th_obs_high_low")
+EXP_NAME_LIST = ("natl_ext_temp_wind_to_wind_winter_m12_obs_tercile", "natl_ext_temp_wind_to_wind_winter_m12_tercile")
+EXP_NAME_LIST = ("natl_ext_temp_wind_to_wind_winter_m12_tercile_network_test_ablation_SH","natl_ext_temp_wind_to_wind_winter_m12_tercile_network_test_ablation_npac",)
+
 if __name__ == "__main__":
 
     start_time = time.time()

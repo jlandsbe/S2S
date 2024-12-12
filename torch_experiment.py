@@ -286,10 +286,15 @@ def train_experiments(
                         trainer.plot_loss()
                         model_savename = dir_settings["model_directory"] + savename_prefix + "_torch_model"
                         torch.save(model.state_dict(),model_savename)
+                    elif type(settings["presaved_mask"]) == type("string"):
+                        model = TorchModel_base(settings, np.shape(soi_train_input)[1:])
+                        mask_save_name = (settings["presaved_mask"]+ "_" + settings["model_type"] + "_"+ f"rng_seed_{settings['rng_seed']}")
+                        model_savename = dir_settings["model_directory"] + mask_save_name + "_torch_model"
+                        model.load_state_dict(torch.load(model_savename))
                     elif settings["presaved_mask"]:
-                            model = TorchModel_base(settings, np.shape(soi_train_input)[1:])
-                            model_savename = dir_settings["model_directory"] + savename_prefix + "_torch_model"
-                            model.load_state_dict(torch.load(model_savename))
+                        model = TorchModel_base(settings, np.shape(soi_train_input)[1:])
+                        model_savename = dir_settings["model_directory"] + savename_prefix + "_torch_model"
+                        model.load_state_dict(torch.load(model_savename))
                     else:
                         raise NotImplementedError("no such model coded yet")
                     if settings["model_type"] == "interp_model":
@@ -303,7 +308,38 @@ def train_experiments(
                                     weights_val = weights_val/np.mean(weights_val)
                                 else:
                                     weights_val = np.where(weights_val>=np.quantile(weights_val,settings["cutoff"]), weights_val, 0)
-                                    # Number of rows in the array
+                            if len(settings["ablation"])>0:
+                                for ab_region in settings["ablation"]:
+                                    #randomly zero out points (number of points equal to number of points in the region)
+                                    flag = 1
+                                    if len(ab_region)>7:
+                                        a_chunk1 = ab_region[0:7]
+                                        a_chunk2 = ab_region[7:]
+                                        if a_chunk1 == "random_":
+                                            flag = 0
+                                            regn = regions.get_region_dict(a_chunk2)
+                                            min_lon, max_lon = regn["lon_range"]
+                                            min_lat, max_lat = regn["lat_range"]
+                                            ilon = np.where((lon >= min_lon) & (lon <= max_lon))[0]
+                                            ilat = np.where((lat >= min_lat) & (lat <= max_lat))[0]
+                                            num_points = len(ilon) * len(ilat)
+                                            # Generate d random indices for the first two dimensions
+                                            m,n,p = np.shape(weights_val)
+                                            random_indices = np.random.choice(m * n, size=num_points, replace=False)
+                                            rows, cols = np.unravel_index(random_indices, (m, n))
+                                            # Set the same random points to zero in all layers of the third dimension
+                                            weights_val[rows, cols, :] = 0
+                                    if ab_region == "ocean":    
+                                        weights_val = build_data.mask_in_land_ocean(weights_val, settings, "land")
+                                    elif ab_region == "land":
+                                        weights_val = build_data.mask_in_land_ocean(weights_val, settings, "ocean")
+                                    elif ab_region == "temp":
+                                        weights_val[:,:,0] = 0
+                                    elif ab_region == "u250":
+                                        weights_val[:,:,-1] = 0
+                                    elif flag:
+                                        weights_val, full_weights = build_data.extract_region(weights_val, region = regions.get_region_dict(ab_region), lat = lat, lon=lon, ablation = 1)
+
                             if settings["gates"]:
                                 reg_map_na = np.zeros(np.shape(weights_val))
                                 reg_map_na = build_data.extract_region(reg_map_na, regions.get_region_dict("n_atlantic"), lat=lat, lon=lon, mask_builder = 1)

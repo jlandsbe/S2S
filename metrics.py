@@ -209,14 +209,14 @@ def super_classification_operation(inputs):
         for n_analogs in inputs["n_analogs"]:
             output_predictions = inputs["analog_output"][i_analogs[:n_analogs]]
             mode = scipy.stats.mode(output_predictions, axis=0)
-            if len(np.shape(output_predictions)) > 1:
-                entropy = entropy_calc_3D(output_predictions, axis=0)
-                entropy = np.mean(entropy)
-            else:
+            if len(np.shape(output_predictions)) == 1:
                 entropy = entropy_calc_1D(output_predictions, axis=0)
+                output_spread.append((inputs["soi_output_sample"]).size/mode.count)
+            else:
+                entropy = nan_array
+                output_spread.append(nan_array)
             results.append(inputs["soi_output_sample"]!=mode.mode) #fraction that were incorrect
-            input_diff.append(nan_array)
-            output_spread.append((inputs["soi_output_sample"]).size/mode.count) #this will be higher as fewer analogs have the mode value. As this number goes up, the disagreement also goes up
+            input_diff.append(nan_array) #this will be higher as fewer analogs have the mode value. As this number goes up, the disagreement also goes up
             output_IQR.append(entropy)
             output_min.append(nan_array)
             output_max.append(nan_array)
@@ -284,6 +284,19 @@ def anomaly_correlation(analog, truth):
 def pred_range(y_true, y_pred):
     return tf.math.reduce_max(y_pred) - tf.math.reduce_min(y_pred)
 
+
+def get_persist_errors_classification(soi, analog_prediction, percentiles):
+    results = []
+    soi = soi.flatten()
+    analog_prediction = analog_prediction.flatten()
+    low_cap_an = np.percentile(analog_prediction, percentiles[0])
+    high_base_an = np.percentile(analog_prediction, percentiles[1])
+    low_cap_soi = np.percentile(soi, percentiles[0])
+    high_base_soi = np.percentile(soi, percentiles[1])
+    analog_output = np.where(analog_prediction <= low_cap_an, -1, np.where(analog_prediction>=high_base_an, 1, 0))
+    soi_output = np.where(soi <= low_cap_soi, -1, np.where(soi>=high_base_soi, 1, 0))
+    results.append(1.0*(soi_output!=analog_output))
+    return np.array(results)
 
 def get_persist_errors(soi, analog_prediction, type="mse"):
     if type=="classify":
