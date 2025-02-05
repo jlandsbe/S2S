@@ -329,9 +329,11 @@ def summarize_skill_score(metrics_dict, settings, crps = 0):
         y_min_limit = -.05
         y_max_limit = 1
     else:
-        y_min_limit = min(0, max(min_y_value - 0.05, -0.05))
+        y_min_limit = max(0, max(min_y_value - 0.005, -0.05))
+        y_max_limit = min(max_y_value + 0.01, 1)
+        #y_min_limit = -.01
         #y_min_limit = min(0, min(min_y_value - 0.05, -0.05))
-        y_max_limit = min(max_y_value + 0.1, 1)
+        
     
     plt.ylim(y_min_limit, y_max_limit)
     plt.grid(False)
@@ -343,7 +345,10 @@ def summarize_skill_score(metrics_dict, settings, crps = 0):
     if error_type == "field":
         plt.title('Anomaly Correlation Coefficient')
     elif settings["percentiles"] != None:
-        plt.title('Classification Accuracy')
+        if crps:
+            plt.title('Brier Skill Score ' + tagon)
+        else:
+            plt.title('Classification Accuracy ' + tagon)
     elif crps:
         plt.title('CRPS Skill Score ' + tagon)
     else:
@@ -962,7 +967,7 @@ def get_shades(base_color, num_shades):
     base = np.array(colors.to_rgb(base_color))
     return [colors.to_hex(base * (1 - (i / num_shades))) for i in range(num_shades)]
 
-def confidence_plot(analogue_vector, error_dictionary, settings, error_climotol = None):
+def confidence_plot(analogue_vector, error_dictionary, settings, error_climotol = None, persist_error = None):
     plt.style.use("default")
     for analog_idx in range(1,len(analogue_vector)):
         fig, ax = plt.subplots(figsize=(12, 6))
@@ -978,7 +983,8 @@ def confidence_plot(analogue_vector, error_dictionary, settings, error_climotol 
                 y_data = error[:, analog_idx]
                 x_data = confidence_values[:, analog_idx]
                 if confidence_name == "Predicted Extremity" or confidence_name == "True Extremity":
-                    x_data = -np.abs(2 * (x_data - np.min(x_data)) / (np.max(x_data) - np.min(x_data)) - 1)
+                    #x_data = -np.abs(2 * (x_data - np.min(x_data)) / (np.max(x_data) - np.min(x_data)) - 1)
+                    x_data = -np.abs(x_data)
                 x_sorted_indices = np.argsort(x_data)
                 # if confidence_name == "Modal Fraction":
                 #     x_sorted_indices = x_sorted_indices[::-1]
@@ -1006,7 +1012,7 @@ def confidence_plot(analogue_vector, error_dictionary, settings, error_climotol 
         
         # Shade the area between the first two lines if there are at least two lines
         if len(lines) >= 2:
-            plt.fill_between(percentages, lines[0].get_ydata(), lines[1].get_ydata(), color='#e9c56a', alpha=0.5)
+            plt.fill_between(percentages, lines[0].get_ydata(), lines[1].get_ydata(), color='#e9c56a', alpha=0.35)
         # if error_climotol is not None:
         #     # Plot a horizontal line marker (dash) at the point (90, mean of error_climotol)
         #    plt.axhline(y=np.mean(error_climotol), color='black', linestyle='--', linewidth=2, label='Average Climatological Error')

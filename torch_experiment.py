@@ -333,12 +333,20 @@ def train_experiments(
                                         weights_val = build_data.mask_in_land_ocean(weights_val, settings, "land")
                                     elif ab_region == "land":
                                         weights_val = build_data.mask_in_land_ocean(weights_val, settings, "ocean")
+                                    elif ab_region == "ocean_temp":
+                                        weights_val[:,:,0] = build_data.mask_in_land_ocean(weights_val, settings, "land")[:,:,0]
+                                    elif ab_region == "land_temp":
+                                        weights_val[:,:,0] = build_data.mask_in_land_ocean(weights_val, settings, "ocean")[:,:,0]
                                     elif ab_region == "temp":
                                         weights_val[:,:,0] = 0
                                     elif ab_region == "u250":
                                         weights_val[:,:,-1] = 0
                                     elif flag:
-                                        weights_val, full_weights = build_data.extract_region(weights_val, region = regions.get_region_dict(ab_region), lat = lat, lon=lon, ablation = 1)
+                                        if ab_region == "jet_stream":
+                                            only_u = 1
+                                            weights_val, full_weights = build_data.extract_region(weights_val, region = regions.get_region_dict(ab_region), lat = lat, lon=lon, ablation = 1, only_u = only_u)
+                                        else:
+                                            weights_val, full_weights = build_data.extract_region(weights_val, region = regions.get_region_dict(ab_region), lat = lat, lon=lon, ablation = 1)
 
                             if settings["gates"]:
                                 reg_map_na = np.zeros(np.shape(weights_val))

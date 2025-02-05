@@ -465,7 +465,7 @@ def smooth_data(data, smooth_time):
 
 
 
-def extract_region(data, region=None, lat=None, lon=None, mask_builder = 0, progressions = 0, ablation = 0):
+def extract_region(data, region=None, lat=None, lon=None, mask_builder = 0, progressions = 0, ablation = 0, only_u = 0):
     if region is None:
         min_lon, max_lon = [0, 360]
         min_lat, max_lat = [-90, 90]
@@ -476,7 +476,10 @@ def extract_region(data, region=None, lat=None, lon=None, mask_builder = 0, prog
         ilon = np.where((lon >= min_lon) & (lon <= max_lon))[0]
         ilat = np.where((lat >= min_lat) & (lat <= max_lat))[0]
         data_ablation = data.copy()
-        data_ablation[ilat,ilon,:] = 0
+        if only_u:
+            data_ablation[ilat,ilon,-1] = 0
+        else:
+            data_ablation[ilat,ilon,:] = 0
         return data_ablation, data
     if mask_builder:
         ilon = np.where((lon >= min_lon) & (lon <= max_lon))[0]

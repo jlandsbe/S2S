@@ -68,7 +68,36 @@ def field_operation(inputs):
 #         for n_analogs in inputs["n_analogs"]:
 #             results.append(get_analog_errors(inputs["soi_output_sample"], np.mean(inputs["analog_output"][i_analogs[:n_analogs]], axis=0), "map"))
 #         return np.stack(results, axis=0)
+def to_one_hot(categories, num_classes=None):
+    if num_classes is None:
+        num_classes = np.max(categories) - np.min(categories) + 1
+    one_hot = np.eye(num_classes)[categories +1] #plus 1, since we use -1, 0, 1
+    return one_hot
 
+# Brier Score computation
+def brier_score(true_vals, predicted_vals):
+    if len(np.shape(true_vals))>1:
+
+        lat = np.shape(true_vals)[0]
+        lon = np.shape(true_vals)[1]
+        ensemble_size = np.shape(predicted_vals)[0]
+
+        # Flatten spatial dimensions
+        true_vals = true_vals.reshape(lat * lon)
+        predicted_vals = predicted_vals.reshape(ensemble_size, lat * lon)
+
+    # One-hot encode true values
+    num_classes = 3  # [-1, 0, 1]
+    true_one_hots = to_one_hot(true_vals, num_classes=num_classes)
+
+    # One-hot encode predicted values and compute probabilities
+    predicted_one_hots = to_one_hot(predicted_vals, num_classes=num_classes)
+    predicted_probs = np.mean(predicted_one_hots, axis=0)  # Average over ensemble members
+    # Compute Brier Score
+    brier = np.sum((true_one_hots - predicted_probs) ** 2, axis=-1) #squared difference
+    if len(np.shape(true_vals))>1:
+        brier = brier.reshape(lat,lon)  
+    return brier
 def map_operation2(inputs):
     assert type(inputs["n_analogs"]) is not int # should be a list-type
     i_analogs = inputs["i_analogs"]
@@ -207,7 +236,7 @@ def super_classification_operation(inputs):
         crps = []
         nan_array = np.ones_like(inputs["soi_output_sample"])*np.nan
         for n_analogs in inputs["n_analogs"]:
-            output_predictions = inputs["analog_output"][i_analogs[:n_analogs]]
+            output_predictions = inputs["analog_output"][i_analogs[:n_analogs]] #num analogs x lat x lon
             mode = scipy.stats.mode(output_predictions, axis=0)
             if len(np.shape(output_predictions)) == 1:
                 entropy = entropy_calc_1D(output_predictions, axis=0)
@@ -215,13 +244,14 @@ def super_classification_operation(inputs):
             else:
                 entropy = nan_array
                 output_spread.append(nan_array)
+            bri_score = brier_score(inputs["soi_output_sample"],output_predictions)
             results.append(inputs["soi_output_sample"]!=mode.mode) #fraction that were incorrect
             input_diff.append(nan_array) #this will be higher as fewer analogs have the mode value. As this number goes up, the disagreement also goes up
             output_IQR.append(entropy)
             output_min.append(nan_array)
             output_max.append(nan_array)
             actual_prediction.append(nan_array)
-            crps.append(nan_array)
+            crps.append(bri_score)
         return (np.stack(results, axis=0), 
                 np.stack(input_diff, axis=0), 
                 np.stack(output_spread, axis=0), 

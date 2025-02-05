@@ -86,7 +86,10 @@ def get_region_dict(region=None):
             "lat_range":[0., 65.],
             "lon_range":[360.-205., 360-125],
         },
-
+        "jet_stream" :{
+            "lat_range":[12., 38.],
+            "lon_range":[180., 320],
+        },
         "trop_indopac" :{
             "lat_range":[-23.5, 23.5],
             "lon_range":[30, 360-80],

@@ -504,7 +504,7 @@ def gap_data(data, step):
 
 
 
-def extract_region(data, region=None, lat=None, lon=None, mask_builder = 0, progressions = 0, ablation = 0):
+def extract_region(data, region=None, lat=None, lon=None, mask_builder = 0, progressions = 0, ablation = 0, only_u = 0):
     if region is None:
         min_lon, max_lon = [0, 360]
         min_lat, max_lat = [-90, 90]
@@ -515,7 +515,10 @@ def extract_region(data, region=None, lat=None, lon=None, mask_builder = 0, prog
         ilon = np.where((lon >= min_lon) & (lon <= max_lon))[0]
         ilat = np.where((lat >= min_lat) & (lat <= max_lat))[0]
         data_ablation = data.copy()
-        data_ablation[np.ix_(ilat, ilon, np.arange(data.shape[2]))] = 0
+        if only_u:
+            data_ablation[np.ix_(ilat, ilon, np.array([1]))] = 0
+        else:
+            data_ablation[np.ix_(ilat, ilon, np.arange(data.shape[2]))] = 0
         return data_ablation, data
     if mask_builder:
         ilon = np.where((lon >= min_lon) & (lon <= max_lon))[0]
@@ -599,7 +602,7 @@ def mask_in_land_ocean(da, settings, maskin="land"):
         else:
             if len(np.shape(da)) > len(np.shape(mask)):
                 for i in range(2,len(np.shape(da))):
-                    mask = np.expand_dims(mask, axis=0)
+                    mask = np.expand_dims(mask, axis=-1)
             return da*mask
     else:
         return mask
@@ -616,7 +619,7 @@ def make_land_mask(settings):
     x_ocean.plot()
 
     #x_land keeps land values, sets ocean to 0
-    x_land = xr.where(x_data < .5, 1.0, 0.0)#replace where there aren't values with 1 (since it's a map of SSS, this implies it is land)
+    x_land = xr.where(x_data > .5, 1.0, 0.0)#replace where there aren't values with 1 (since it's a map of SSS, this implies it is land)
     x_land.to_netcdf(dir_settings["net_data"] + "/month_land_mask.nc")
     x_land.plot()
 
