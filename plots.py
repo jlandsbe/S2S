@@ -317,7 +317,7 @@ def summarize_skill_score(metrics_dict, settings, crps = 0):
     max_values.append(np.nanmax(x_plot))
     min_values.append(np.nanmin(x_plot))
     plt.ylabel('Skill Score')
-    plt.xlabel('Number of Analogues Averaged')
+    plt.xlabel('Number of Analogs Used')
     plt.xlim(0, np.max(metrics_dict["analogue_vector"])*1.01)
     max_y_value = np.nanmax(max_values)
     print(min_values)
@@ -348,7 +348,7 @@ def summarize_skill_score(metrics_dict, settings, crps = 0):
         if crps:
             plt.title('Brier Skill Score ' + tagon)
         else:
-            plt.title('Classification Accuracy ' + tagon)
+            plt.title('Classification Accuracy Skill Score ' + tagon)
     elif crps:
         plt.title('CRPS Skill Score ' + tagon)
     else:

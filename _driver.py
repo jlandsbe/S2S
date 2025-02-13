@@ -49,6 +49,7 @@ EXP_NAME_LIST = ("natl_ext_temp_wind_to_wind_winter_m12_tercile_extra", "natl_ex
 "natl_ext_temp_wind_to_wind_winter_m12_tercile_ablation_u250_extra",
 )
 EXP_NAME_LIST = ("california_temp_to_temp_week_summer_90th_high_low","california_temp_to_temp_week_summer_90th_obs_high_low","california_temp_to_temp_week34_summer_tercile","california_temp_to_temp_week34_obs_summer_tercile")
+EXP_NAME_LIST = ("natl_ext_temp_wind_to_wind_winter_m12_tercile_extra","natl_ext_temp_wind_to_wind_winter_m12_obs_tercile_extra")
 
 
 if __name__ == "__main__":

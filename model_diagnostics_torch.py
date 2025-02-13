@@ -341,7 +341,7 @@ def create_subplots(random_soi_input, random_soi_output, selected_analogs, selec
     plt.close()
 
 def process_results(run_complex_operations, metrics_function, soi_iterable, pool, n_analogues, 
-                    soi_input_shape, metrics_directory, savename_prefix, file_suffix, chunksize=2000):
+                    soi_input_shape, metrics_directory, savename_prefix, file_suffix, chunksize=1000):
     """
     Runs the complex operations and processes the results, including appending errors and best analogs,
     saving the best analogs to a file, and returning error metrics.
@@ -1132,9 +1132,9 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
         # MAKE CRPS-SKILL PLOT
         plt.figure(figsize=(8, 4))
         plots.summarize_skill_score(crps_dict, settings, 1)
-        plt.text(0.0, .99, ' ' + settings["savename_prefix"] + '\n smooth_time: [' + str(settings["smooth_len_input"])
-                + ', ' + str(settings["smooth_len_output"]) + '], leadtime: ' + str(settings["lead_time"]),
-                fontsize=6, color="gray", va="top", ha="left", fontfamily="monospace", transform=plt.gca().transAxes)
+        # plt.text(0.0, .99, ' ' + settings["savename_prefix"] + '\n smooth_time: [' + str(settings["smooth_len_input"])
+        #         + ', ' + str(settings["smooth_len_output"]) + '], leadtime: ' + str(settings["lead_time"]),
+        #         fontsize=6, color="gray", va="top", ha="left", fontfamily="monospace", transform=plt.gca().transAxes)
         plt.tight_layout()
         if save_figure:
             plt.savefig(dir_settings["figure_diag_directory"] + settings["savename_prefix"] +
@@ -1195,7 +1195,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
         for analog_idx in range(1, len(analogue_vector)):
             net_err_i = np.mean(error_network,axis=0)[analog_idx]
             for nmid, error_type in enumerate([error_climo, error_corr,error_globalcorr]):
-                nms = ["climatology", "regional", "global"]
+                nms = ["Climatology: ", "Regional: ", "Global: "]
                 error_i = np.mean(error_type,axis=0)[analog_idx]
                 skill_err = 1 - (net_err_i/error_i)
                 map_out = expand_maps(lat, lon, skill_err, settings)
@@ -1219,9 +1219,9 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                 # MAKE CRPS-SKILL PLOT
         plt.figure(figsize=(8, 4))
         plots.summarize_skill_score(crps_dict, settings, 1)
-        plt.text(0.0, .99, ' ' + settings["savename_prefix"] + '\n smooth_time: [' + str(settings["smooth_len_input"])
-                + ', ' + str(settings["smooth_len_output"]) + '], leadtime: ' + str(settings["lead_time"]),
-                fontsize=6, color="gray", va="top", ha="left", fontfamily="monospace", transform=plt.gca().transAxes)
+        # plt.text(0.0, .99, ' ' + settings["savename_prefix"] + '\n smooth_time: [' + str(settings["smooth_len_input"])
+        #         + ', ' + str(settings["smooth_len_output"]) + '], leadtime: ' + str(settings["lead_time"]),
+        #         fontsize=6, color="gray", va="top", ha="left", fontfamily="monospace", transform=plt.gca().transAxes)
         plt.tight_layout()
         if save_figure:
             plt.savefig(dir_settings["figure_diag_directory"] + settings["savename_prefix"] +
@@ -1382,7 +1382,7 @@ def map_skill_plot(settings, weights_train, lat, lon, analog_vector, name, exten
         ttl = "CRPS Skill for " + name + " " + str(analog_vector) + ' analogs'
         sv_addition = "_CRPS"
     else:
-        ttl = "MSE Skill for " + name + " " + str(analog_vector) + ' analogs'
+        ttl = "MAE Skill Relative to " + name + " " + str(analog_vector) + ' analogs'
     climits = (-np.max([np.abs(np.quantile(climits_dat,.10)),np.quantile(climits_dat,.90)]), np.max([np.abs(np.quantile(climits_dat,.10)),np.quantile(climits_dat,.90)]))
     # plot the weighted mask
     for imap in range(num_maps):

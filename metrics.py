@@ -77,7 +77,7 @@ def to_one_hot(categories, num_classes=None):
 # Brier Score computation
 def brier_score(true_vals, predicted_vals):
     if len(np.shape(true_vals))>1:
-
+        multi = 1
         lat = np.shape(true_vals)[0]
         lon = np.shape(true_vals)[1]
         ensemble_size = np.shape(predicted_vals)[0]
@@ -95,7 +95,7 @@ def brier_score(true_vals, predicted_vals):
     predicted_probs = np.mean(predicted_one_hots, axis=0)  # Average over ensemble members
     # Compute Brier Score
     brier = np.sum((true_one_hots - predicted_probs) ** 2, axis=-1) #squared difference
-    if len(np.shape(true_vals))>1:
+    if multi:
         brier = brier.reshape(lat,lon)  
     return brier
 def map_operation2(inputs):
