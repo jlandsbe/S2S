@@ -151,7 +151,7 @@ def drawOnGlobe(ax, map_proj, data, lats, lons, cmap='coolwarm', vmin=None, vmax
 
     if cbarBool:
         cb = plt.colorbar(image, shrink=.45, orientation="horizontal", pad=.02, extend=extent)
-        cb.ax.tick_params(labelsize=6)
+        cb.ax.tick_params(labelsize=10)
     else:
         cb = None
 
@@ -339,49 +339,53 @@ def summarize_skill_score(metrics_dict, settings, crps = 0):
     plt.grid(False)
     plt.legend(fontsize=8)
     if '_obs' in settings["presaved_data_filename"]:
-        tagon = '(ERA5)'
+        tagon = 'ERA5 '
     else:
-        tagon = '(CESM2)'
+        tagon = 'CESM2 '
     if error_type == "field":
         plt.title('Anomaly Correlation Coefficient')
     elif settings["percentiles"] != None:
         if crps:
-            plt.title('Brier Skill Score ' + tagon)
+            plt.title(tagon + 'Brier Skill Score' )
         else:
-            plt.title('Classification Accuracy Skill Score ' + tagon)
+            plt.title(tagon + 'Accuracy Skill Score')
     elif crps:
-        plt.title('CRPS Skill Score ' + tagon)
+        plt.title(tagon + 'CRPS Skill Score')
     else:
-        plt.title('MAE Skill Score ' + tagon)
+        plt.title(tagon + 'MAE Skill Score')
 
 def skill_score_helper(x, clima, error_type):
     if error_type == "field":
         return x
     else:
         return x/clima
-def plot_state_masks(fig, settings, weights_train, lat, lon, region_bool=True, climits=None, central_longitude=215.,
-                      title_text=None, subplot=(1, 1, 1), cmap=None, use_text=True, edgecolor="turquoise", 
-                      cbarBool=True):
+
+
+def plot_state_masks(fig, settings, weights_train, lat, lon, region_bool=True, climits=None, 
+                      central_longitude=215., title_text=None, subplot=(1, 1, 1), cmap=None, 
+                      use_text=True, edgecolor="turquoise", cbarBool=True, 
+                      projection=ccrs.EqualEarth):
+    
     if cmap is None:
         cmap = get_mycolormap()
 
-    if settings["maskout_landocean_input"] == "ocean":
-        landfacecolor = "k"
-    else:
-        landfacecolor = "None"
+    landfacecolor = "k" if settings["maskout_landocean_input"] == "ocean" else "None"
 
     for channel in [0, 1]:
-
         if climits is None:
-            cmin = 0.  # np.min(weights_train[:])
-            cmax = np.max(weights_train[:])
-            climits = (cmin, cmax)
+            climits = (0., np.max(weights_train[:]))
 
-        ax = fig.add_subplot(subplot[0], subplot[1], subplot[2],
-                             projection=ct.crs.PlateCarree(central_longitude=central_longitude))
+        # Try to apply central_longitude if supported
+        try:
+            ax = fig.add_subplot(subplot[0], subplot[1], subplot[2], 
+                                 projection=projection(central_longitude=central_longitude))
+        except TypeError:
+            ax = fig.add_subplot(subplot[0], subplot[1], subplot[2], projection=projection())
+
         print(climits)
+
         drawOnGlobe(ax,
-                    ct.crs.PlateCarree(),
+                    projection(),
                     weights_train,
                     lat,
                     lon,
@@ -391,163 +395,98 @@ def plot_state_masks(fig, settings, weights_train, lat, lon, region_bool=True, c
                     cmap=cmap,
                     extent=None,
                     cbarBool=cbarBool,
-                    landfacecolor=landfacecolor,
-                    )
+                    landfacecolor=landfacecolor)
+
         if region_bool:
             reg = regions.get_region_dict(settings["target_region_name"])
-            if reg == "NorthEast":
-                highlight_states = ['Connecticut', 'Delaware', 'Maine', 'Maryland', 'Massachusetts', 'New Hampshire', 'New Jersey', 'New York', 'Pennsylvania', 'Rhode Island', 'Vermont']
-                shpfilename = shpreader.natural_earth(resolution='110m',
-                                           category='cultural',
-                                           name='admin_1_states_provinces')
-                reader = shpreader.Reader(shpfilename)
 
-                # Create a list to store the geometries of the highlighted states
-                highlighted_states_geometries = []
 
-                # Iterate over the states and add the geometries of the highlighted states to the list
-                for state in reader.records():
-                    state_name = state.attributes['name']
-                    if state_name in highlight_states:
-                        highlighted_states_geometries.append(state.geometry)
-
-                # Merge the geometries into a single geometry
-                merged_geometry = cascaded_union(highlighted_states_geometries)
-
-                # Add the boundary of the merged geometry to the map
-                ax.add_geometries([merged_geometry], ccrs.PlateCarree(), facecolor='none', edgecolor=edgecolor, linewidth=3)
-            else:
-                rect = mpl.patches.Rectangle((reg["lon_range"][0], reg["lat_range"][0]),
-                                         reg["lon_range"][1] - reg["lon_range"][0],
-                                         reg["lat_range"][1] - reg["lat_range"][0],
-                                         transform=ct.crs.PlateCarree(),
-                                         facecolor='None',
-                                         edgecolor=edgecolor,
-                                         color=None,
-                                         linewidth=2.5,
-                                         zorder=200,
-                                         )
+            rect = mpl_patches.Rectangle((reg["lon_range"][0], reg["lat_range"][0]),
+                                            reg["lon_range"][1] - reg["lon_range"][0],
+                                            reg["lat_range"][1] - reg["lat_range"][0],
+                                            transform=ccrs.PlateCarree(),
+                                            facecolor='None',
+                                            edgecolor=edgecolor,
+                                            linewidth=2.5,
+                                            zorder=200)
             ax.add_patch(rect)
+
             if settings["target_region_name"] == "north pdo":
-                rect = mpl.patches.Rectangle((150, -30),
-                                             50,
-                                             25,
-                                             transform=ct.crs.PlateCarree(),
-                                             facecolor='None',
-                                             edgecolor=edgecolor,
-                                             linestyle="--",
-                                             color=None,
-                                             linewidth=2,
-                                             zorder=100,
-                                             )
-                # ax.add_patch(rect)
-                rect = mpl.patches.Rectangle((125, 5),
-                                             180-125,
-                                             25,
-                                             transform=ct.crs.PlateCarree(),
-                                             facecolor='None',
-                                             edgecolor=edgecolor,
-                                             linestyle="--",
-                                             color=None,
-                                             linewidth=2,
-                                             zorder=101,
-                                             )
-                # ax.add_patch(rect)
+                rects = [
+                    ((150, -30), 50, 25),
+                    ((125, 5), 180-125, 25)
+                ]
+                for (x, y), w, h in rects:
+                    rect = mpl_patches.Rectangle((x, y), w, h,
+                                                 transform=ccrs.PlateCarree(),
+                                                 facecolor='None',
+                                                 edgecolor=edgecolor,
+                                                 linestyle="--",
+                                                 linewidth=2,
+                                                 zorder=100)
+                    ax.add_patch(rect)
 
         plt.title(title_text)
+
         if use_text:
-            plt.text(0.01, .02, ' ' + settings["savename_prefix"] + '\n smooth_time: [' + str(settings["smooth_len_input"])
-                    + ', ' + str(settings["smooth_len_output"]) + '], leadtime: ' + str(settings["lead_time"]),
-                    fontsize=6, color="gray", va="bottom", ha="left", fontfamily="monospace", backgroundcolor="white",
-                    transform=ax.transAxes,
-                    )
+            plt.text(0.01, .02, f' {settings["savename_prefix"]}\n smooth_time: [{settings["smooth_len_input"]}, {settings["smooth_len_output"]}], leadtime: {settings["lead_time"]}',
+                     fontsize=6, color="gray", va="bottom", ha="left", fontfamily="monospace", 
+                     backgroundcolor="white", transform=ax.transAxes)
 
         return ax, climits
-def plot_interp_masks(fig, settings, weights_train, lat, lon, region_bool=True, climits=None, central_longitude=215.,
-                      title_text=None, subplot=(1, 1, 1), cmap=None, use_text=True, edgecolor="turquoise", 
-                      cbarBool=True, style = "seaborn-v0_8"):
-#here weights_train is of shape lat x lon
+
+
+
+def plot_interp_masks(fig, settings, weights_train, lat, lon, region_bool=True, climits=None, 
+                      central_longitude=215., title_text=None, subplot=(1, 1, 1), cmap=None, 
+                      use_text=True, edgecolor="turquoise", cbarBool=True, style="seaborn-v0_8",
+                      projection=ccrs.EqualEarth):  # Default projection is EqualEarth
+    
     plt.style.use(style)
+
+    # Handle colormap if not provided
     if cmap is None:
         cmap = get_mycolormap()
 
-    if settings["maskout_landocean_input"] == "ocean":
-        landfacecolor = "k"
-    else:
-        landfacecolor = "None"
+    # Set landfacecolor based on settings
+    landfacecolor = "k" if settings["maskout_landocean_input"] == "ocean" else "None"
 
-    for channel in [0, 1]:
+    # Set color limits if not provided
+    if climits is None:
+        cmin, cmax = 0., np.max(weights_train[:])
+        climits = (cmin, cmax)
 
-        if climits is None:
-            cmin = 0.  # np.min(weights_train[:])
-            cmax = np.max(weights_train[:])
-            climits = (cmin, cmax)
+    # Apply central_longitude if the projection supports it
+    ax = fig.add_subplot(subplot[0], subplot[1], subplot[2], 
+                         projection=projection(central_longitude=central_longitude))
 
-        ax = fig.add_subplot(subplot[0], subplot[1], subplot[2],
-                             projection=ct.crs.PlateCarree(central_longitude=central_longitude))
+    # Draw the data on the map
+    drawOnGlobe(ax, ccrs.PlateCarree(), weights_train, lat, lon,
+                fastBool=True, vmin=climits[0], vmax=climits[1],
+                cmap=cmap, extent=None, cbarBool=cbarBool, landfacecolor=landfacecolor)
 
-        drawOnGlobe(ax,
-                    ct.crs.PlateCarree(),
-                    weights_train,
-                    lat,
-                    lon,
-                    fastBool=True,
-                    vmin=climits[0],
-                    vmax=climits[1],
-                    cmap=cmap,
-                    extent=None,
-                    cbarBool=cbarBool,
-                    landfacecolor=landfacecolor,
-                    )
-        if region_bool:
-            reg = regions.get_region_dict(settings["target_region_name"])
-            rect = mpl.patches.Rectangle((reg["lon_range"][0], reg["lat_range"][0]),
-                                         reg["lon_range"][1] - reg["lon_range"][0],
-                                         reg["lat_range"][1] - reg["lat_range"][0],
-                                         transform=ct.crs.PlateCarree(),
-                                         facecolor='None',
-                                         edgecolor=edgecolor,
-                                         color=None,
-                                         linewidth=2.5,
-                                         zorder=200,
-                                         )
-            ax.add_patch(rect)
-            if settings["target_region_name"] == "north pdo":
-                rect = mpl.patches.Rectangle((150, -30),
-                                             50,
-                                             25,
-                                             transform=ct.crs.PlateCarree(),
-                                             facecolor='None',
-                                             edgecolor=edgecolor,
-                                             linestyle="--",
-                                             color=None,
-                                             linewidth=2,
-                                             zorder=100,
-                                             )
-                # ax.add_patch(rect)
-                rect = mpl.patches.Rectangle((125, 5),
-                                             180-125,
-                                             25,
-                                             transform=ct.crs.PlateCarree(),
-                                             facecolor='None',
-                                             edgecolor=edgecolor,
-                                             linestyle="--",
-                                             color=None,
-                                             linewidth=2,
-                                             zorder=101,
-                                             )
-                # ax.add_patch(rect)
+    # Draw region boundary if specified
+    if region_bool:
+        reg = regions.get_region_dict(settings["target_region_name"])
+        rect = mpl.patches.Rectangle((reg["lon_range"][0], reg["lat_range"][0]),
+                                     reg["lon_range"][1] - reg["lon_range"][0],
+                                     reg["lat_range"][1] - reg["lat_range"][0],
+                                     transform=ccrs.PlateCarree(),
+                                     facecolor='None', edgecolor=edgecolor,
+                                     linewidth=2.5, zorder=200)
+        ax.add_patch(rect)
 
-        plt.title(title_text)
-        #plt.title("Weighting of Temperature for Midwest Prediction")
-        if use_text:
-            plt.text(0.01, .02, ' ' + settings["savename_prefix"] + '\n smooth_time: [' + str(settings["smooth_len_input"])
-                    + ', ' + str(settings["smooth_len_output"]) + '], leadtime: ' + str(settings["lead_time"]),
-                    fontsize=6, color="gray", va="bottom", ha="left", fontfamily="monospace", backgroundcolor="white",
-                    transform=ax.transAxes,
-                    )
+    # Set title
+    plt.title(title_text)
 
-        return ax, climits
+    # Add additional text if enabled
+    if use_text:
+        plt.text(0.01, .02, f' {settings["savename_prefix"]}\n smooth_time: [{settings["smooth_len_input"]}, {settings["smooth_len_output"]}], leadtime: {settings["lead_time"]}',
+                 fontsize=6, color="gray", va="bottom", ha="left", fontfamily="monospace",
+                 backgroundcolor="white", transform=ax.transAxes)
+
+    return ax, climits
+
 def JBL_maps_plot(fig, settings, weights_train, lat, lon, region_bool=True, climits=None, central_longitude=215.,
                       title_text=None, subplot=(1, 1, 1), cmap=None, use_text=True, edgecolor="turquoise", 
                       cbarBool=True, extent_limit=0):
@@ -559,7 +498,7 @@ def JBL_maps_plot(fig, settings, weights_train, lat, lon, region_bool=True, clim
 
     # Create a diverging colormap
     cmap = LinearSegmentedColormap.from_list("my_diverging_cmap", [hex_color1, "white", hex_color2])
-    cmap.set_bad(color=(233/255, 196/255, 106/255))
+    cmap.set_bad(color="silver")
     #cmap.set_under(color='white')
     if settings["maskout_landocean_input"] == "ocean":
         landfacecolor = "k"
@@ -983,8 +922,11 @@ def confidence_plot(analogue_vector, error_dictionary, settings, error_climotol 
                 y_data = error[:, analog_idx]
                 x_data = confidence_values[:, analog_idx]
                 if confidence_name == "Predicted Extremity" or confidence_name == "True Extremity":
+                    tagon = "Predicted Extremity"
                     #x_data = -np.abs(2 * (x_data - np.min(x_data)) / (np.max(x_data) - np.min(x_data)) - 1)
                     x_data = -np.abs(x_data)
+                else:
+                    tagon = "Ensemble Agreement"
                 x_sorted_indices = np.argsort(x_data)
                 # if confidence_name == "Modal Fraction":
                 #     x_sorted_indices = x_sorted_indices[::-1]
@@ -1012,13 +954,14 @@ def confidence_plot(analogue_vector, error_dictionary, settings, error_climotol 
         
         # Shade the area between the first two lines if there are at least two lines
         if len(lines) >= 2:
-            plt.fill_between(percentages, lines[0].get_ydata(), lines[1].get_ydata(), color='#e9c56a', alpha=0.35)
+            plt.fill_between(percentages, lines[0].get_ydata(), lines[1].get_ydata(), color='silver', alpha=0.35)
         # if error_climotol is not None:
         #     # Plot a horizontal line marker (dash) at the point (90, mean of error_climotol)
         #    plt.axhline(y=np.mean(error_climotol), color='black', linestyle='--', linewidth=2, label='Average Climatological Error')
         #         # Add custom legend entry for the arrow
-        plt.legend(fontsize=8)
-        plt.xlabel('Percent Top Cutoff', fontsize=14)
+        plt.legend(fontsize=14)
+        plt.tick_params(axis='both', which='major', labelsize=14)  # Increase axis number size
+        plt.xlabel('Percentage of Samples with Highest ' + tagon, fontsize=14)
         if '_obs' in settings["presaved_data_filename"]:
             tagon = '(ERA5)'
         else:

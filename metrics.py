@@ -52,22 +52,6 @@ def field_operation(inputs):
             results.append(get_analog_errors(inputs["soi_output_sample"], np.mean(inputs["analog_output"][i_analogs[:n_analogs]], axis=0), "field"))
         return np.stack(results, axis=0)
 
-# def map_operation(inputs):
-#     assert type(inputs["n_analogs"]) is not int # should be a list-type
-#     i_analogs = compute_best_analogs(inputs, inputs["max_analogs"])
-#     results = []
-#     if inputs["uncertainties"]:
-#         input_diff = []
-#         output_spread = []
-#         for n_analogs in inputs["n_analogs"]:
-#             results.append(get_analog_errors(inputs["soi_output_sample"], np.mean(inputs["analog_output"][i_analogs[:n_analogs]], axis=0), "map"))
-#             input_diff.append((np.mean((inputs["soi_input_sample"] - inputs["analog_input"][i_analogs[:n_analogs]])**2))**.5)
-#             output_spread.append(np.mean(np.var(inputs["analog_output"][i_analogs[:n_analogs]],axis=0)))
-#         return [np.stack(results, axis=0), np.stack(input_diff, axis=0), np.stack(output_spread, axis=0)]
-#     else:
-#         for n_analogs in inputs["n_analogs"]:
-#             results.append(get_analog_errors(inputs["soi_output_sample"], np.mean(inputs["analog_output"][i_analogs[:n_analogs]], axis=0), "map"))
-#         return np.stack(results, axis=0)
 def to_one_hot(categories, num_classes=None):
     if num_classes is None:
         num_classes = np.max(categories) - np.min(categories) + 1
@@ -76,6 +60,7 @@ def to_one_hot(categories, num_classes=None):
 
 # Brier Score computation
 def brier_score(true_vals, predicted_vals):
+    multi = 0
     if len(np.shape(true_vals))>1:
         multi = 1
         lat = np.shape(true_vals)[0]
@@ -87,7 +72,7 @@ def brier_score(true_vals, predicted_vals):
         predicted_vals = predicted_vals.reshape(ensemble_size, lat * lon)
 
     # One-hot encode true values
-    num_classes = 3  # [-1, 0, 1]
+    num_classes = 3  # [-1, 0, 1]/
     true_one_hots = to_one_hot(true_vals, num_classes=num_classes)
 
     # One-hot encode predicted values and compute probabilities

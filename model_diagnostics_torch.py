@@ -407,7 +407,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
         soi_output_val = soi_output
         soi_output = 1.0*(soi_output > np.median(soi_output))
         analog_output = 1.0*(analog_output > np.median(analog_output))
-        #soi_output = soi_output - 1.0*(soi_output <-)
+
 
     if settings["percentiles"]!=None:
         analog_output_val = analog_output
@@ -453,7 +453,6 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
         error_climo = []
         error_custom = []
 
-    # Which analogs are we going to go through?
     n_analogues = analogue_vector
 
 
@@ -986,14 +985,13 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
         net_col = "#2A9D8F"
         global_col = "#F4A261"
         regional_col = "#E76F51"
-        error_conf_dict = {"Network":(error_network, network_confidence_dict, "solid",net_col), "Northern Hemisphere":(error_customcorr, NH_cofidence_dict, "dashed", "#E9C46A"), "Global":(error_globalcorr, global_confidence_dict, "solid", global_col), "Regional":(error_corr, regional_cofidence_dict, "dashed", regional_col), "Random":(np.array(error_random).T, random_confidence_dict, "dashdot", "black")}
+        error_conf_dict = {"Network":(error_network, network_confidence_dict, "solid",net_col), "Northern Hemisphere":(error_customcorr, NH_cofidence_dict, "dashed", "#E9C46A"), "Global":(error_globalcorr, global_confidence_dict, "solid", global_col), "Regional":(error_corr, regional_cofidence_dict, "solid", regional_col), "Random":(np.array(error_random).T, random_confidence_dict, "dashdot", "black")}
 
         plots.confidence_plot(analogue_vector, error_conf_dict, settings, climatol, persist_err)
 
 
     # -----------------------
     # Persistence
-    #persist_true, persist_pred = metrics.calc_persistence_baseline(soi_output, settings)
     error_persist = np.repeat(np.array([persist_err]), len_analogues)
     if settings["extremes_percentile"] !=0:
         error_persist = error_persist * np.nan
@@ -1173,12 +1171,6 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                 "error_maxskill": np.ones_like(error_maxskill)*np.nan,}
         else:
             crps_dict = {}
-        #all the errors I get will be of the form analogs x lat x lon,
-        #so I want to input the analog vector for the title and the numpy arrays as weights, number of maps will always be 1, just
-        #do a four loop where I save with the number of analogs in the name of the thing
-        #also I will want to do the numpy subtraction of climatology to get a skill before passing it to my plot function
-        #climo_tiled = np.broadcast_to(error_climo, np.shape(error_network))
-        #error_persist = np.broadcast_to(error_persist, np.shape(error_network))
         error_network = np.array(error_network)
         error_corr = np.array(error_corr)
         error_customcorr = np.array(error_customcorr)
@@ -1219,9 +1211,6 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
                 # MAKE CRPS-SKILL PLOT
         plt.figure(figsize=(8, 4))
         plots.summarize_skill_score(crps_dict, settings, 1)
-        # plt.text(0.0, .99, ' ' + settings["savename_prefix"] + '\n smooth_time: [' + str(settings["smooth_len_input"])
-        #         + ', ' + str(settings["smooth_len_output"]) + '], leadtime: ' + str(settings["lead_time"]),
-        #         fontsize=6, color="gray", va="top", ha="left", fontfamily="monospace", transform=plt.gca().transAxes)
         plt.tight_layout()
         if save_figure:
             plt.savefig(dir_settings["figure_diag_directory"] + settings["savename_prefix"] +
@@ -1231,15 +1220,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
             plt.show()
         else:
             plt.close()
-        # if len(crps_dict) > 0:
-        #     net_err_i = np.mean(crps_dict["error_network"],axis=0)[analog_idx]
-        #     for nmid, error_type in enumerate([crps_dict["error_climo"], crps_dict["error_corr"]]):
-        #         nms = ["climatology", "regional"]
-        #         error_i = np.mean(error_type,axis=0)[analog_idx]
-        #         skill_err = 1 - (net_err_i/error_i)
-        #         map_out = expand_maps(lat, lon, skill_err, settings)
-        #         map_skill_plot(settings, map_out, lat, lon, settings["analogue_vec"][analog_idx], str(nms[nmid]), crps=1)
-        print("#print maps of CRPS!")
+
         return metrics_dict, crps_dict
 
 def retrieve_mask(model, settings, shape, setmaskedas=0.0):
@@ -1263,52 +1244,29 @@ def scale_mask(weighted_mask, landmask, setmaskedas=0.0):
 
     return weighted_mask
 
-# def video_syn_data(settings, weights_train_list, lat, lon, sv=""):
-#     #expects shape of lat x lon x channels
-#     num_maps = [weights_train_list][0].shape[-1]
-#     ax = dict()
-#     fig = plt.figure(figsize=(7.5 * num_maps, 5))
-
-#     # colorbar limits
-#     #climits_dat = np.squeeze(weights_train_list[0,:,:,:])
-#     climits = (np.nanmin(weights_train_list),np.nanmax(weights_train_list))
-#     #climits = (np.nanmin(weights_train_list),2.5)
-
-#     # plot the weighted mask
-#     def update(frame):
-#         plt.clf()  # Clear the previous plot
-#         weights_train = weights_train_list[frame]
-#         artists = []
-#         if len(weights_train.shape) == 4:
-#             for imap in range(num_maps):
-#                 lab = "Mask for Channel " + str(imap)
-#                 ax, artist = plots.plot_state_masks(fig, settings, weights_train_ind[:, :, imap], lat=lat, lon=lon, central_longitude=215., climits = climits, title_text="Mask for Channel " + str(imap),subplot=(1, num_maps, imap + 1), )
-#                 artists.append(artist)
-#         else:
-#             for imap in range(num_maps):
-#                 ax, artist = plots.plot_interp_masks(fig, settings, weights_train[:, :, imap], lat=lat, lon=lon, central_longitude=215., climits = climits, title_text="Mask for Channel " + str(imap),subplot=(1, num_maps, imap + 1), )
-#                 artists.append(artist)
-#         return artists
-#     # save the mask
-#     ani = animation.FuncAnimation(fig, update, frames=len(weights_train_list), interval=50, blit=False)
-#     output_file = dir_settings["figure_directory"] + settings["savename_prefix"] + sv + "_synthetic_data.gif"
-#     ani.save(output_file, writer='imagemagick')
-#     plt.tight_layout()
 
 def visualize_interp_model(settings, weights_train, lat, lon, sv="", clims =(0,0), ttl=""):
     #expects shape of lat x lon x channels
     num_maps = weights_train.shape[-1]
     ax = dict()
-    fig = plt.figure(figsize=(7.5 * num_maps, 5))
+    fig = plt.figure(figsize=(7.5, 5* num_maps))
 
     # colorbar limits
     climits_dat = weights_train
     climits = (climits_dat.min(), climits_dat.max())
     if clims != (0,0): 
         climits = clims
-    #climits = (0.04303372, 2.996723)
+
     print(climits)
-    #climits = (np.percentile(climits_dat, 96),np.percentile(climits_dat, 99))
+
+    reg_code = settings["target_region_name"]
+    if reg_code == "n_atlantic_ext":
+        reg_name = "the North Atlantic"
+    elif reg_code == "california":
+        reg_name = "Southern California"
+    elif reg_code == "midwest":
+        reg_name = "the Midwestern U.S."
+
     # plot the weighted mask
     if len(weights_train.shape) == 4:
 
@@ -1331,7 +1289,7 @@ def visualize_interp_model(settings, weights_train, lat, lon, sv="", clims =(0,0
                 if predictor == "PRECT":
                     lab = "Precipitation"
             if type(ttl) == type(""):
-                ttl_text = "Weighted Mask of " + lab
+                ttl_text = lab + " Mask for " + reg_name
             else:
                 ttl_text = str(imap) + " Branch Weight: " + str(ttl[imap])
             ax, _ = plots.plot_state_masks(fig, settings, weights_train_ind[:, :, imap], lat=lat, lon=lon, central_longitude=215., climits = climits, title_text=ttl_text,subplot=(1, num_maps, imap + 1), )
@@ -1354,10 +1312,13 @@ def visualize_interp_model(settings, weights_train, lat, lon, sv="", clims =(0,0
                 if predictor == "PRECT":
                     lab = "Precipitation"
             if type(ttl) == type(""):
-                ttl_text = ttl_text = "Weighted Mask of " + lab
+                ttl_text = ttl_text = lab + " Mask for " + reg_name
             else:
                 ttl_text = str(imap) + " Branch Weight: " + str(ttl[imap])
-            ax, _ = plots.plot_interp_masks(fig, settings, weights_train[:, :, imap], lat=lat, lon=lon, central_longitude=215., climits = climits, title_text=ttl_text,subplot=(1, num_maps, imap + 1), use_text=0)
+            ax, _ = plots.plot_interp_masks(fig, settings, weights_train[:, :, imap], lat=lat, lon=lon, 
+                                            central_longitude=215., climits=climits, title_text=ttl_text, 
+                                            subplot=(num_maps, 1, imap + 1), use_text=False)
+
  # save the mask
         print(dir_settings["figure_directory"] + settings["savename_prefix"] +
                     '_averaged_masks.png')
@@ -1373,16 +1334,20 @@ def visualize_interp_model(settings, weights_train, lat, lon, sv="", clims =(0,0
 def map_skill_plot(settings, weights_train, lat, lon, analog_vector, name, extent_limit = 1, crps = 0):
     #expects shape of lat x lon x channels
     num_maps = 1
+    if settings["soi_test_members"][0] == "ERA5":
+        prefix = "ERA5"
+    else:
+        prefix = "CESM"
     ax = dict()
     fig = plt.figure(figsize=(7.5 * num_maps, 5))
     sv_addition = ""
     # colorbar limits
     climits_dat = weights_train
     if crps:
-        ttl = "CRPS Skill for " + name + " " + str(analog_vector) + ' analogs'
+        ttl = prefix + " CRPS Skill for " + name + " " + str(analog_vector) + ' analogs'
         sv_addition = "_CRPS"
     else:
-        ttl = "MAE Skill Relative to " + name + " " + str(analog_vector) + ' analogs'
+        ttl = prefix + " MAE Skill Relative to " + name + " " + str(analog_vector) + ' analogs'
     climits = (-np.max([np.abs(np.quantile(climits_dat,.10)),np.quantile(climits_dat,.90)]), np.max([np.abs(np.quantile(climits_dat,.10)),np.quantile(climits_dat,.90)]))
     # plot the weighted mask
     for imap in range(num_maps):

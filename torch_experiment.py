@@ -219,13 +219,6 @@ def train_experiments(
                     settings["savename_prefix"] = savename_prefix
                     print('--- RUNNING ' + savename_prefix + '---')
 
-                    # Check if the model metrics exist and overwrite is off.
-                    if settings["gif"]:
-                        output_plot = analog_input*np.nan
-                        insert_row = (analog_input.shape[1] - analog_output.shape[1]) // 2
-                        output_plot[:,insert_row:insert_row + analog_output.shape[1], :, :] = analog_output[:,:,:,np.newaxis]
-                        model_diagnostics_torch.video_syn_data(settings,analog_input[0:200,:,:,:],lat,lon, sv= "_input_")
-                        model_diagnostics_torch.video_syn_data(settings,output_plot[0:200,:,:,:],lat,lon, sv = "_output_")
                     # Make, compile, train, and save the model.
                     tf.keras.backend.clear_session()
                     np.random.seed(settings["rng_seed"])
@@ -301,7 +294,6 @@ def train_experiments(
                             map_layer = getattr(model, "bias_only")
                             biases = map_layer.data
                             weights_val = biases.numpy().reshape(np.shape(analog_input)[1:])
-                            #weights_val = weights_val/np.mean(weights_val)
                             if settings["cutoff"]>0:
                                 if settings["cutoff"]>1:
                                     weights_val = weights_val**settings["cutoff"]
@@ -391,7 +383,7 @@ def train_experiments(
 
 
                     if settings["mask_only"]:
-                        exit()
+                        continue
                     # PLOT MODEL EVALUATION METRICS
                     if settings["gates"]:
                         metrics_dict, crps_dict = model_diagnostics_torch.visualize_metrics(settings, model, soi_test_input, soi_test_output,
