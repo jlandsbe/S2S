@@ -34,123 +34,6 @@ __version__ = "30 March 2023"
 dir_settings = base_directories.get_directories()
 
 
-
-def gaussuian_filter(kernel_size, sigma=1, mu=0, noise = 0):
- 
-    # Initializing value of x,y as grid of kernel size
-    # in the range of kernel size
- 
-    x, y = np.meshgrid(np.linspace(-1, 1, kernel_size),
-                       np.linspace(-1, 1, kernel_size))
-    dst = np.sqrt(x**2+y**2)
- 
-    # lower normal part of gaussian
-    normal = 1/(2 * np.pi * sigma**2)
- 
-    # Calculating Gaussian filter
-    gauss = np.exp(-((dst-mu)**2 / (2.0 * sigma**2))) * normal
-    gauss = gauss + noise*np.random.rand(*gauss.shape)
-    return gauss
-
-def make_mjo_syn(settings, inpt, tsteps = 1000, ilat = 72, ilon = 144, olat = 12, olon = 144, speed = 36, mjo_strength = 32, mjo_size = 6,
-                 noise_strength = 10, noise_size = 4, number_noise = 100, back_noise = .01, mjo_cycle_var = 0, enso=0):
-    noise_gauss = []
-    memory = "neutral"
-    input_arr = back_noise*(np.random.rand(tsteps, ilat, ilon)-.5)
-    output_arr = np.zeros((tsteps, olat, olon))
-    prev_maps = np.zeros((tsteps, olat, olon))
-    mjo = mjo_strength*gaussuian_filter(mjo_size)
-    for num in range(number_noise):
-        ns = np.random.choice([1])*noise_strength*gaussuian_filter(noise_size)
-        ns = ns + (np.random.choice([1])*noise_strength*(.2*np.random.rand())*gaussuian_filter(noise_size))
-        noise_gauss.append(ns)
-    start_row = (output_arr.shape[1] - mjo.shape[0]) // 2
-    output_arr[0,0:mjo.shape[0], 0: mjo.shape[1]] += mjo
-    prev_maps[0,0:mjo.shape[0], 0: mjo.shape[1]] += mjo
-    for i in range(1,tsteps):
-        output_arr[i,:,:] = np.roll(prev_maps[i-1,:,:], speed, axis=1)
-        prev_maps[i,:,:] = np.roll(prev_maps[i-1,:,:], speed, axis=1)
-        if enso>0:
-            if not i%int(1*ilon/speed):
-                #this should really be 6*ilon, but I'm doing 1 so we see it more
-                phase = np.random.rand()
-                if phase >.8:
-                    memory = "nino"
-                elif phase <.2:
-                    memory = "nina"
-                else:
-                    memory = "neutral"
-        if memory == "nino":
-            output_arr[i,2:olat-2,65:110] = output_arr[i,2:olat-2,65:110] + enso + .1*(np.random.rand(*(output_arr[i,2:olat-2,65:110].shape))-.5)
-        if memory == "nina":
-            output_arr[i,2:olat-2,65:110] = output_arr[i,2:olat-2,65:110] - enso + .1*(np.random.rand(*(output_arr[i,2:olat-2,65:110].shape))-.5)
-        
-        if not (int(i-mjo_size/2)%(144/speed)) and mjo_cycle_var>0 and mjo_cycle_var<1:
-            xlow = 1/(1+mjo_cycle_var)
-            xhigh = 1+mjo_cycle_var
-            random_float = random.uniform(xlow, xhigh)
-            output_arr[i] = output_arr[i] * random_float
-            prev_maps[i] = prev_maps[i]* random_float
-    for arr in input_arr:
-        for ng in noise_gauss:
-            x_pos = np.random.randint(0, arr.shape[0] - ng.shape[0] + 1)
-            y_pos = np.random.randint(0, arr.shape[1] - ng.shape[1] + 1)
-            arr[x_pos:x_pos+ng.shape[0], y_pos:y_pos+ng.shape[1]] = ng
-    clean_output = np.copy(output_arr)
-    for arr2 in output_arr:
-        for count, ng in enumerate(noise_gauss):
-            if count%6 == 0:
-                x_pos = np.random.randint(0, arr2.shape[0] - ng.shape[0] + 1)
-                y_pos = np.random.randint(0, arr2.shape[1] - ng.shape[1] + 1)
-                arr2[x_pos:x_pos+ng.shape[0], y_pos:y_pos+ng.shape[1]] += .5*ng
-    insert_row = (input_arr.shape[1] - output_arr.shape[1]) // 2
-    input_arr[:,insert_row:insert_row + output_arr.shape[1], :] += clean_output  
-
-    #input_arr = (input_arr - mean_value)/std_value
-    #output_arr = (output_arr - mean_value)/std_value
-    #output_arr = input_arr[:,insert_row:insert_row + output_arr.shape[1], :]
-    if inpt:
-        input_arr = input_arr[:,:,:,np.newaxis]
-        return input_arr[:-settings["lead_time"]]
-    else:
-        return output_arr[settings["lead_time"]:]
-    
-def get_masks_for_assess(soi_ins, soi_out):
-    #masks = np.zeros(np.shape(soi_ins[:,:,:,0]))
-    masks = np.zeros(np.shape(soi_ins[:,:,:]))
-    mjo = 1*gaussuian_filter(6)
-    mjo = mjo/mjo
-    output_arr = np.zeros(np.shape(soi_out))
-    #output_arr[0,0:mjo.shape[0], 0: mjo.shape[1]] += mjo
-    output_arr[0:mjo.shape[0], 0: mjo.shape[1]] += mjo
-    insert_row = (masks.shape[1] - output_arr.shape[0]) // 2
-    masks[:,insert_row:insert_row + output_arr.shape[0], :] += output_arr  
-    for i in range(1,len(masks)):
-        masks[i,:,:] = np.roll(masks[i-1,:,:], 36, axis=1)
-    return masks
-
-def JBL_assess(masks, soi_ins, analog_ins, soi_outs, analog_outs, m = 0, c = 0.0):
-    soi_ins = soi_ins[:,:,:,0]
-    analog_ins = analog_ins[:,:,:,0] #just removing added axis for extra channels
-    A = np.array([])
-    B = np.array([])
-    for i in range(len(masks)):
-        weighted_soi_in = soi_ins[i]*masks[i]
-        weighted_analog_ins = analog_ins * masks[i]
-        all_ins_mae = np.mean((weighted_soi_in-weighted_analog_ins)**2, axis=(1,2))
-        all_outs_mae = np.mean((soi_outs[i]-analog_outs)**2, axis=(1,2))
-        #now I need to do the linear transform to get them as close as possible
-        A  = np.append(A,all_ins_mae)
-        B  = np.append(B, all_outs_mae)
-    if m==0:
-        m = (np.sum(A*B) - np.mean(B)*np.sum(A))/(np.sum(A*A)-np.mean(A)*np.sum(A))
-        c = np.mean(B) - m*np.mean(A)
-    A_tr = m*A + c
-    diffs = np.mean((A_tr-B)**2)
-    print("Weights (m):", m)
-    print("Biases (c):", c)
-    return np.mean(diffs)
-
 def train_experiments(
     exp_name_list,
     data_directory,
@@ -195,15 +78,6 @@ def train_experiments(
         if settings["preprocess"]:
             print("Preprocessing completed")
         else:
-            if settings["total_synthetic"]:
-                analog_input = make_mjo_syn(settings, 1, 2500)
-                analog_output = make_mjo_syn(settings, 0, 2500)
-                soi_train_input = make_mjo_syn( settings, 1, 2500)
-                soi_train_output = make_mjo_syn(settings, 0, 2500)
-                soi_val_input = make_mjo_syn(settings, 1,1000)
-                soi_val_output = make_mjo_syn(settings, 0,1000)
-                soi_test_input = make_mjo_syn(settings, 1,1000)
-                soi_test_output = make_mjo_syn(settings, 0,1000)
             for rng_seed in settings["rng_seed_list"]:  #0 to 100 by 10s
                 settings["rng_seed"] = rng_seed
 

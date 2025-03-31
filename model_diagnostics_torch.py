@@ -341,7 +341,7 @@ def create_subplots(random_soi_input, random_soi_output, selected_analogs, selec
     plt.close()
 
 def process_results(run_complex_operations, metrics_function, soi_iterable, pool, n_analogues, 
-                    soi_input_shape, metrics_directory, savename_prefix, file_suffix, chunksize=1000):
+                    soi_input_shape, metrics_directory, savename_prefix, file_suffix, chunksize=50):
     """
     Runs the complex operations and processes the results, including appending errors and best analogs,
     saving the best analogs to a file, and returning error metrics.
@@ -1187,7 +1187,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
         for analog_idx in range(1, len(analogue_vector)):
             net_err_i = np.mean(error_network,axis=0)[analog_idx]
             for nmid, error_type in enumerate([error_climo, error_corr,error_globalcorr]):
-                nms = ["Climatology: ", "Regional: ", "Global: "]
+                nms = ["Climatology with ", "Regional with ", "Global with "]
                 error_i = np.mean(error_type,axis=0)[analog_idx]
                 skill_err = 1 - (net_err_i/error_i)
                 map_out = expand_maps(lat, lon, skill_err, settings)
@@ -1249,7 +1249,10 @@ def visualize_interp_model(settings, weights_train, lat, lon, sv="", clims =(0,0
     #expects shape of lat x lon x channels
     num_maps = weights_train.shape[-1]
     ax = dict()
-    fig = plt.figure(figsize=(7.5, 5* num_maps))
+    if len(settings["ablation"]) > 0 or settings["cutoff"]>0:
+        fig = plt.figure(figsize=(7.5 * num_maps, 5))
+    else:
+        fig = plt.figure(figsize=(7.5, 5* num_maps))
 
     # colorbar limits
     climits_dat = weights_train
@@ -1262,10 +1265,13 @@ def visualize_interp_model(settings, weights_train, lat, lon, sv="", clims =(0,0
     reg_code = settings["target_region_name"]
     if reg_code == "n_atlantic_ext":
         reg_name = "the North Atlantic"
+        task_name = "Task 3: "
     elif reg_code == "california":
         reg_name = "Southern California"
+        task_name = "Task 1: "
     elif reg_code == "midwest":
         reg_name = "the Midwestern U.S."
+        task_name = "Task 2: "
 
     # plot the weighted mask
     if len(weights_train.shape) == 4:
@@ -1289,7 +1295,10 @@ def visualize_interp_model(settings, weights_train, lat, lon, sv="", clims =(0,0
                 if predictor == "PRECT":
                     lab = "Precipitation"
             if type(ttl) == type(""):
-                ttl_text = lab + " Mask for " + reg_name
+                if len(settings["ablation"]) > 0 or settings["cutoff"]>0:
+                    ttl_text = lab + " Mask for " + reg_name
+                else:
+                    ttl_text = task_name + lab + " Mask for " + reg_name
             else:
                 ttl_text = str(imap) + " Branch Weight: " + str(ttl[imap])
             ax, _ = plots.plot_state_masks(fig, settings, weights_train_ind[:, :, imap], lat=lat, lon=lon, central_longitude=215., climits = climits, title_text=ttl_text,subplot=(1, num_maps, imap + 1), )
@@ -1312,12 +1321,21 @@ def visualize_interp_model(settings, weights_train, lat, lon, sv="", clims =(0,0
                 if predictor == "PRECT":
                     lab = "Precipitation"
             if type(ttl) == type(""):
-                ttl_text = ttl_text = lab + " Mask for " + reg_name
+                if len(settings["ablation"]) > 0 or settings["cutoff"]>0:
+                    ttl_text = lab + " Mask for " + reg_name
+                    ax, _ = plots.plot_interp_masks(fig, settings, weights_train[:, :, imap], lat=lat, lon=lon, 
+                                central_longitude=215., climits=climits, title_text=ttl_text, 
+                                subplot=(1, num_maps, imap + 1), use_text=False)
+                else:
+                    ttl_text = task_name + lab + " Mask for " + reg_name
+                    ax, _ = plots.plot_interp_masks(fig, settings, weights_train[:, :, imap], lat=lat, lon=lon, 
+                                central_longitude=215., climits=climits, title_text=ttl_text, 
+                                subplot=(num_maps, 1, imap + 1), use_text=False)
             else:
                 ttl_text = str(imap) + " Branch Weight: " + str(ttl[imap])
-            ax, _ = plots.plot_interp_masks(fig, settings, weights_train[:, :, imap], lat=lat, lon=lon, 
-                                            central_longitude=215., climits=climits, title_text=ttl_text, 
-                                            subplot=(num_maps, 1, imap + 1), use_text=False)
+                ax, _ = plots.plot_interp_masks(fig, settings, weights_train[:, :, imap], lat=lat, lon=lon, 
+                                                central_longitude=215., climits=climits, title_text=ttl_text, 
+                                                subplot=(num_maps, 1, imap + 1), use_text=False)
 
  # save the mask
         print(dir_settings["figure_directory"] + settings["savename_prefix"] +
@@ -1343,11 +1361,21 @@ def map_skill_plot(settings, weights_train, lat, lon, analog_vector, name, exten
     sv_addition = ""
     # colorbar limits
     climits_dat = weights_train
+    reg_code = settings["target_region_name"]
+    if reg_code == "n_atlantic_ext":
+        reg_name = "the North Atlantic"
+        task_name = "Task 3: "
+    elif reg_code == "california":
+        reg_name = "Southern California"
+        task_name = "Task 1: "
+    elif reg_code == "midwest":
+        reg_name = "the Midwestern U.S."
+        task_name = "Task 2: "
     if crps:
-        ttl = prefix + " CRPS Skill for " + name + " " + str(analog_vector) + ' analogs'
+        ttl = task_name + prefix + " CRPS Skill Relative to " + name + str(analog_vector) + ' analogs'
         sv_addition = "_CRPS"
     else:
-        ttl = prefix + " MAE Skill Relative to " + name + " " + str(analog_vector) + ' analogs'
+        ttl = task_name + prefix + " MAE Skill Relative to " + name + str(analog_vector) + ' analogs'
     climits = (-np.max([np.abs(np.quantile(climits_dat,.10)),np.quantile(climits_dat,.90)]), np.max([np.abs(np.quantile(climits_dat,.10)),np.quantile(climits_dat,.90)]))
     # plot the weighted mask
     for imap in range(num_maps):

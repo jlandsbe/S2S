@@ -254,7 +254,8 @@ def summarize_errors(metrics_dict):
 
 def summarize_skill_score(metrics_dict, settings, crps = 0):
     plt.style.use("default")
-    marker_size = 15
+    marker_size = 20
+    line_wid = 4
     net_col = "#2A9D8F"
     global_col = "#F4A261"
     regional_col = "#E76F51"
@@ -271,7 +272,6 @@ def summarize_skill_score(metrics_dict, settings, crps = 0):
              color="black", alpha=alpha)
         
 
-    
     # x_plot = metrics.eval_function(metrics_dict["error_maxskill"])
     # x_plot = 1. - skill_score_helper(x_plot, x_climatology_baseline, error_type)
     # plt.plot(metrics_dict["analogue_vector"], x_plot, '.-', markersize=marker_size, label='max skill',
@@ -282,26 +282,26 @@ def summarize_skill_score(metrics_dict, settings, crps = 0):
         x_plot = metrics.eval_function(metrics_dict["error_customcorr"])
         x_plot = 1. - skill_score_helper(x_plot, x_climatology_baseline, error_type)
         plt.plot(metrics_dict["analogue_vector"], x_plot, '.-', markersize=marker_size, label='N hemisphere',
-                color="palevioletred", alpha=alpha)
+                color="palevioletred", alpha=alpha, linewidth=line_wid)
         max_values.append(np.nanmax(x_plot))
         min_values.append(np.nanmin(x_plot))
     x_plot = metrics.eval_function(metrics_dict["error_corr"])
     x_plot = 1. - skill_score_helper(x_plot, x_climatology_baseline, error_type)
     plt.plot(metrics_dict["analogue_vector"], x_plot, '.-', markersize=marker_size, label='region corr.',
-             color=regional_col, alpha=alpha)
+             color=regional_col, alpha=alpha, linewidth=line_wid)
     max_values.append(np.nanmax(x_plot))
     min_values.append(np.nanmin(x_plot))
     x_plot = metrics_dict["error_persist"]
     if np.mean(x_plot) > 0:
         x_plot = 1. - skill_score_helper(x_plot, x_climatology_baseline, error_type)
         plt.plot(metrics_dict["analogue_vector"], x_plot, '--', markersize=0, label='persistence',
-                color="saddlebrown", alpha=alpha)
+                color="saddlebrown", alpha=alpha, linewidth=line_wid)
         max_values.append(np.nanmax(x_plot))
         min_values.append(np.nanmin(x_plot))
     x_plot = metrics.eval_function(metrics_dict["error_globalcorr"])
     x_plot = 1. - skill_score_helper(x_plot, x_climatology_baseline, error_type)
     plt.plot(metrics_dict["analogue_vector"], x_plot, '.-', markersize=marker_size, label='global corr.',
-             color=global_col, alpha=alpha)
+             color=global_col, alpha=alpha, linewidth=line_wid)
     max_values.append(np.nanmax(x_plot))
     min_values.append(np.nanmin(x_plot))
     # x_plot = metrics.eval_function(metrics_dict["error_random"])
@@ -313,11 +313,11 @@ def summarize_skill_score(metrics_dict, settings, crps = 0):
     x_plot = metrics.eval_function(metrics_dict["error_network"])
     x_plot = 1. - skill_score_helper(x_plot, x_climatology_baseline, error_type)
     plt.plot(metrics_dict["analogue_vector"], x_plot, '.-', markersize=marker_size, label='masked analog',
-             color=net_col, alpha=alpha)
+             color=net_col, alpha=alpha, linewidth=line_wid)
     max_values.append(np.nanmax(x_plot))
     min_values.append(np.nanmin(x_plot))
-    plt.ylabel('Skill Score')
-    plt.xlabel('Number of Analogs Used')
+    plt.ylabel('Skill Score', fontsize=14)
+    plt.xlabel('Number of Analogs Used', fontsize=14)
     plt.xlim(0, np.max(metrics_dict["analogue_vector"])*1.01)
     max_y_value = np.nanmax(max_values)
     print(min_values)
@@ -334,10 +334,23 @@ def summarize_skill_score(metrics_dict, settings, crps = 0):
         #y_min_limit = -.01
         #y_min_limit = min(0, min(min_y_value - 0.05, -0.05))
         
-    
     plt.ylim(y_min_limit, y_max_limit)
     plt.grid(False)
-    plt.legend(fontsize=8)
+    ax = plt.gca()  # Get the current axis
+    ax.yaxis.set_major_locator(plt.MaxNLocator(nbins=7))  # Set the maximum number of y-ticks to 5
+    plt.legend(fontsize=12)
+    plt.xticks(fontsize=14)
+    plt.yticks(fontsize=14)
+    reg_code = settings["target_region_name"]
+    if reg_code == "n_atlantic_ext":
+        reg_name = "the North Atlantic"
+        task_name = "Task 3: "
+    elif reg_code == "california":
+        reg_name = "Southern California"
+        task_name = "Task 1: "
+    elif reg_code == "midwest":
+        reg_name = "the Midwestern U.S."
+        task_name = "Task 2: "
     if '_obs' in settings["presaved_data_filename"]:
         tagon = 'ERA5 '
     else:
@@ -346,13 +359,13 @@ def summarize_skill_score(metrics_dict, settings, crps = 0):
         plt.title('Anomaly Correlation Coefficient')
     elif settings["percentiles"] != None:
         if crps:
-            plt.title(tagon + 'Brier Skill Score' )
+            plt.title(task_name + tagon + 'Brier Skill Score', fontsize = 16)
         else:
-            plt.title(tagon + 'Accuracy Skill Score')
+            plt.title(task_name + tagon + 'Accuracy Skill Score', fontsize = 16)
     elif crps:
-        plt.title(tagon + 'CRPS Skill Score')
+        plt.title(task_name + tagon + 'CRPS Skill Score', fontsize = 16)
     else:
-        plt.title(tagon + 'MAE Skill Score')
+        plt.title(task_name + tagon + 'MAE Skill Score', fontsize = 16)
 
 def skill_score_helper(x, clima, error_type):
     if error_type == "field":
@@ -803,103 +816,103 @@ def plot_history(settings, history):
 
 
 
-def uncertainty_whiskers(analogue_vector, network_error, analog_match_error, prediction_spread, settings, baseline_error=[], baseline_analog_match=[],
-                          baseline_spread=[], random_error = None, random_spread = None,bins1=[0], bins2=[0]):
-    plt.style.use("default")
-    for analog_idx in range(len(analogue_vector)-1):
-        y_data = network_error[:, analog_idx+1]
-        x_data = prediction_spread[:, analog_idx+1]
-        z = analog_match_error[:, analog_idx+1]
-        if len(baseline_error)>0:
-            NH_y_data = baseline_error[0][:, analog_idx+1]
-            NH_x_data = baseline_spread[0][:, analog_idx+1]
-            NH_z = baseline_analog_match[0][:, analog_idx+1]
-            NH_x_sorted_indices = np.argsort(NH_x_data)
-            NH_y_sorted_by_x = NH_y_data[NH_x_sorted_indices]
-            NH_z_sorted_indices = np.argsort(NH_z)
-            NH_y_sorted_by_z = NH_y_data[NH_z_sorted_indices]
-            NH_y_means_x = []
-            NH_y_means_z = []
-            if len(baseline_error)>1:
-                global_y_data = baseline_error[1][:, analog_idx+1]
-                global_x_data = baseline_spread[1][:, analog_idx+1]
-                global_z = baseline_analog_match[1][:, analog_idx+1]
-                global_x_sorted_indices = np.argsort(global_x_data)
-                global_y_sorted_by_x = global_y_data[global_x_sorted_indices]
-                global_z_sorted_indices = np.argsort(global_z)
-                global_y_sorted_by_z = global_y_data[global_z_sorted_indices]
-                global_y_means_x = []
-                global_y_means_z = []
-        if random_error is not None:
-            baseline_y_data = random_error[:, analog_idx+1]
-            baseline_x_data = random_spread[:, analog_idx+1]
-            random_sorted_indices = np.argsort(baseline_x_data)
-            random_sorted = baseline_y_data[random_sorted_indices]
-            random_y_means_x = []
-        x_sorted_indices = np.argsort(x_data)
-        y_sorted_by_x = y_data[x_sorted_indices]
-        z_sorted_indices = np.argsort(z)
-        y_sorted_by_z = y_data[z_sorted_indices]
-        xz_sorted_indices = np.argsort(x_data * z)
-        y_sorted_by_xz = y_data[xz_sorted_indices]
-        # Percentages to calculate means for
-        percentages = np.arange(100, 4, -1)
+# def uncertainty_whiskers(analogue_vector, network_error, analog_match_error, prediction_spread, settings, baseline_error=[], baseline_analog_match=[],
+#                           baseline_spread=[], random_error = None, random_spread = None,bins1=[0], bins2=[0]):
+#     plt.style.use("default")
+#     for analog_idx in range(len(analogue_vector)-1):
+#         y_data = network_error[:, analog_idx+1]
+#         x_data = prediction_spread[:, analog_idx+1]
+#         z = analog_match_error[:, analog_idx+1]
+#         if len(baseline_error)>0:
+#             NH_y_data = baseline_error[0][:, analog_idx+1]
+#             NH_x_data = baseline_spread[0][:, analog_idx+1]
+#             NH_z = baseline_analog_match[0][:, analog_idx+1]
+#             NH_x_sorted_indices = np.argsort(NH_x_data)
+#             NH_y_sorted_by_x = NH_y_data[NH_x_sorted_indices]
+#             NH_z_sorted_indices = np.argsort(NH_z)
+#             NH_y_sorted_by_z = NH_y_data[NH_z_sorted_indices]
+#             NH_y_means_x = []
+#             NH_y_means_z = []
+#             if len(baseline_error)>1:
+#                 global_y_data = baseline_error[1][:, analog_idx+1]
+#                 global_x_data = baseline_spread[1][:, analog_idx+1]
+#                 global_z = baseline_analog_match[1][:, analog_idx+1]
+#                 global_x_sorted_indices = np.argsort(global_x_data)
+#                 global_y_sorted_by_x = global_y_data[global_x_sorted_indices]
+#                 global_z_sorted_indices = np.argsort(global_z)
+#                 global_y_sorted_by_z = global_y_data[global_z_sorted_indices]
+#                 global_y_means_x = []
+#                 global_y_means_z = []
+#         if random_error is not None:
+#             baseline_y_data = random_error[:, analog_idx+1]
+#             baseline_x_data = random_spread[:, analog_idx+1]
+#             random_sorted_indices = np.argsort(baseline_x_data)
+#             random_sorted = baseline_y_data[random_sorted_indices]
+#             random_y_means_x = []
+#         x_sorted_indices = np.argsort(x_data)
+#         y_sorted_by_x = y_data[x_sorted_indices]
+#         z_sorted_indices = np.argsort(z)
+#         y_sorted_by_z = y_data[z_sorted_indices]
+#         xz_sorted_indices = np.argsort(x_data * z)
+#         y_sorted_by_xz = y_data[xz_sorted_indices]
+#         # Percentages to calculate means for
+#         percentages = np.arange(100, 4, -1)
 
-        # Lists to store the means
-        y_means_x = []
-        y_means_z = []
-        #y_means_xz = []
+#         # Lists to store the means
+#         y_means_x = []
+#         y_means_z = []
+#         #y_means_xz = []
 
-        # Calculate means for each percentage
-        for p in percentages:
-            cutoff_index = int(len(x_data) * (p / 100))
-            y_subset_x = y_sorted_by_x[:cutoff_index]
-            y_means_x.append(np.mean(y_subset_x))
-            y_subset_z = y_sorted_by_z[:cutoff_index]
-            y_means_z.append(np.mean(y_subset_z))
-            if len(baseline_error)>0:
-                NH_y_subset_x = NH_y_sorted_by_x[:cutoff_index]
-                NH_y_means_x.append(np.mean(NH_y_subset_x))
-                NH_y_subset_z = NH_y_sorted_by_z[:cutoff_index]
-                NH_y_means_z.append(np.mean(NH_y_subset_z))
-                if len(baseline_error)>1:
-                    global_y_subset_x = global_y_sorted_by_x[:cutoff_index]
-                    global_y_means_x.append(np.mean(global_y_subset_x))
-                    global_y_subset_z = global_y_sorted_by_z[:cutoff_index]
-                    global_y_means_z.append(np.mean(global_y_subset_z))
-            if random_error is not None:
-                random_y_subset_x = random_sorted[:cutoff_index]
-                random_y_means_x.append(np.mean(random_y_subset_x))
-            #y_subset_xz = y_sorted_by_xz[:cutoff_index]
-            #y_means_xz.append(np.mean(y_subset_xz))
-        fig, ax = plt.subplots(figsize=(12, 6))
-        plt.plot(percentages, 100*(1-np.array(y_means_z)), linestyle='-', linewidth = 7, color='forestgreen', label='Analog Matching Error')
-        plt.plot(percentages, 100*(1-np.array(y_means_x)), linestyle='-', linewidth = 7, color='deepskyblue', label='Prediction Spread')
-        if len(baseline_error)>0:
-            #plt.plot(percentages, baseline_y_means_z, linestyle='dashed', linewidth = 5, color='forestgreen', label='NH Analog Matching Error')
-            plt.plot(percentages, 100*(1-np.array(NH_y_means_x)), linestyle='dashed', linewidth = 5, color='skyblue', label='NH Prediction Spread')
-            if len(baseline_error)>1:
-                plt.plot(percentages, 100*(1-np.array(global_y_means_x)), linestyle='dotted', linewidth = 5, color='lightskyblue', label='Global Prediction Spread')
-        if random_error is not None:
-            plt.plot(percentages, 100*(1-np.array(random_y_means_x)), linestyle='dotted', linewidth = 5, color='coral', label='Random Prediction Spread')
-        #plt.plot(percentages, y_means_xz, linestyle='-', linewidth = 7, color='gold', label='Analog Match Error x Prediction Spread')
-        # Increase the font size of the labels and title
-        plt.xlabel('Percent Most Confident', fontsize=14)
-        plt.ylabel('Percent Accuracy', fontsize=14)
-        plt.title('Discard Plot for Prediction Spread (' + str(analogue_vector[analog_idx+1]) + " analogs)", fontsize=16)
-        ax.legend()
+#         # Calculate means for each percentage
+#         for p in percentages:
+#             cutoff_index = int(len(x_data) * (p / 100))
+#             y_subset_x = y_sorted_by_x[:cutoff_index]
+#             y_means_x.append(np.mean(y_subset_x))
+#             y_subset_z = y_sorted_by_z[:cutoff_index]
+#             y_means_z.append(np.mean(y_subset_z))
+#             if len(baseline_error)>0:
+#                 NH_y_subset_x = NH_y_sorted_by_x[:cutoff_index]
+#                 NH_y_means_x.append(np.mean(NH_y_subset_x))
+#                 NH_y_subset_z = NH_y_sorted_by_z[:cutoff_index]
+#                 NH_y_means_z.append(np.mean(NH_y_subset_z))
+#                 if len(baseline_error)>1:
+#                     global_y_subset_x = global_y_sorted_by_x[:cutoff_index]
+#                     global_y_means_x.append(np.mean(global_y_subset_x))
+#                     global_y_subset_z = global_y_sorted_by_z[:cutoff_index]
+#                     global_y_means_z.append(np.mean(global_y_subset_z))
+#             if random_error is not None:
+#                 random_y_subset_x = random_sorted[:cutoff_index]
+#                 random_y_means_x.append(np.mean(random_y_subset_x))
+#             #y_subset_xz = y_sorted_by_xz[:cutoff_index]
+#             #y_means_xz.append(np.mean(y_subset_xz))
+#         fig, ax = plt.subplots(figsize=(12, 6))
+#         plt.plot(percentages, 100*(1-np.array(y_means_z)), linestyle='-', linewidth = 7, color='forestgreen', label='Analog Matching Error')
+#         plt.plot(percentages, 100*(1-np.array(y_means_x)), linestyle='-', linewidth = 7, color='deepskyblue', label='Prediction Spread')
+#         if len(baseline_error)>0:
+#             #plt.plot(percentages, baseline_y_means_z, linestyle='dashed', linewidth = 5, color='forestgreen', label='NH Analog Matching Error')
+#             plt.plot(percentages, 100*(1-np.array(NH_y_means_x)), linestyle='dashed', linewidth = 5, color='skyblue', label='NH Prediction Spread')
+#             if len(baseline_error)>1:
+#                 plt.plot(percentages, 100*(1-np.array(global_y_means_x)), linestyle='dotted', linewidth = 5, color='lightskyblue', label='Global Prediction Spread')
+#         if random_error is not None:
+#             plt.plot(percentages, 100*(1-np.array(random_y_means_x)), linestyle='dotted', linewidth = 5, color='coral', label='Random Prediction Spread')
+#         #plt.plot(percentages, y_means_xz, linestyle='-', linewidth = 7, color='gold', label='Analog Match Error x Prediction Spread')
+#         # Increase the font size of the labels and title
+#         plt.xlabel('Percent Most Confident', fontsize=14)
+#         plt.ylabel('Percent Accuracy', fontsize=14)
+#         plt.title('Discard Plot for Prediction Spread (' + str(analogue_vector[analog_idx+1]) + " analogs)", fontsize=16)
+#         ax.legend()
 
-        # Remove top and right spines
-        ax = plt.gca()
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
+#         # Remove top and right spines
+#         ax = plt.gca()
+#         ax.spines['top'].set_visible(False)
+#         ax.spines['right'].set_visible(False)
 
 
-        plt.gca().invert_xaxis()
-        plt.savefig(dir_settings["figure_diag_directory"] + settings["savename_prefix"] +
-        '_' + "discard_plot" + str(analogue_vector[analog_idx+1]) + '.png', dpi=dpiFig, bbox_inches='tight')
-        plt.close(fig)
-        # Show the plot
+#         plt.gca().invert_xaxis()
+#         plt.savefig(dir_settings["figure_diag_directory"] + settings["savename_prefix"] +
+#         '_' + "discard_plot" + str(analogue_vector[analog_idx+1]) + '.png', dpi=dpiFig, bbox_inches='tight')
+#         plt.close(fig)
+#         # Show the plot
 
 
 def get_shades(base_color, num_shades):
@@ -962,11 +975,21 @@ def confidence_plot(analogue_vector, error_dictionary, settings, error_climotol 
         plt.legend(fontsize=14)
         plt.tick_params(axis='both', which='major', labelsize=14)  # Increase axis number size
         plt.xlabel('Percentage of Samples with Highest ' + tagon, fontsize=14)
+        reg_code = settings["target_region_name"]
+        if reg_code == "n_atlantic_ext":
+            reg_name = "the North Atlantic"
+            task_name = "Task 3: "
+        elif reg_code == "california":
+            reg_name = "Southern California"
+            task_name = "Task 1: "
+        elif reg_code == "midwest":
+            reg_name = "the Midwestern U.S."
+            task_name = "Task 2: "
         if '_obs' in settings["presaved_data_filename"]:
             tagon = '(ERA5)'
         else:
             tagon = '(CESM2)'
-        plt.title('Discard Plot for '+ str(analogue_vector[analog_idx]) + " Analogs " + tagon, fontsize=16)
+        plt.title(task_name + 'Discard Plot for '+ str(analogue_vector[analog_idx]) + " Analogs " + tagon, fontsize=16)
         # Create a custom legend entry for the arro
         #plt.axvline(x=50, color='black', linestyle='--', linewidth=2)
         ax = plt.gca()
