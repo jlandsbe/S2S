@@ -989,7 +989,7 @@ def assess_metrics(settings, model, soi_input, soi_output, analog_input,
 
         plots.confidence_plot(analogue_vector, error_conf_dict, settings, climatol, persist_err)
 
-
+    
     # -----------------------
     # Persistence
     error_persist = np.repeat(np.array([persist_err]), len_analogues)
